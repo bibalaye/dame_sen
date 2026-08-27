@@ -37,6 +37,15 @@
   --red: #c2452c;
   --indigo: #234a7d;
 
+  /*
+   * Le laiton et le vert servent d'aplats et de bordures. Employés comme
+   * couleur de texte sur fond clair, ils tombent respectivement à 2,6:1 et
+   * 4,4:1 — sous le seuil de lisibilité. Ces variantes assombries leur sont
+   * réservées ; en thème sombre, les teintes vives reprennent leur place.
+   */
+  --brass-ink: #7d550c;
+  --green-ink: #03602f;
+
   --braid-a: #c9922e;
   --braid-b: #2f6b52;
 
@@ -74,6 +83,8 @@
     --piece-dark: #1d1916;
     --piece-dark-edge: #050403;
 
+    --brass-ink: #d9a845;
+    --green-ink: #4cbb84;
     --brass: #d9a845;
     --green: #35a86a;
     --green-deep: #2f9760;
@@ -111,7 +122,9 @@
   --piece-dark: #1d1916;
   --piece-dark-edge: #050403;
 
-  --brass: #d9a845;
+  --brass-ink: #d9a845;
+  --green-ink: #4cbb84;
+    --brass: #d9a845;
   --green: #35a86a;
   --green-deep: #2f9760;
   --red: #dd7256;
