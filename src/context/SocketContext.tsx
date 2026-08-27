@@ -2,14 +2,21 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { MoveType, PlayerType } from '@/types/game';
+import type { Board, Move, Player } from '@/lib/engine';
+
+/**
+ * Adresse du serveur temps réel. Codée en dur sur localhost auparavant, ce
+ * qui rendait le multijoueur injouable ailleurs que sur le poste de
+ * développement. Vide, on se rabat sur l'origine de la page.
+ */
+const SERVER_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? '';
 
 // Define the shape of our socket context
 interface SocketContextType {
   socket: Socket | null;
   isConnected: boolean;
   roomId: string | null;
-  playerType: PlayerType | null;
+  playerType: Player | null;
   opponent: string | null;
   isMultiplayer: boolean;
   isRoomCreator: boolean;
@@ -17,9 +24,9 @@ interface SocketContextType {
   error: string | null;
   createRoom: (username: string) => void;
   joinRoom: (roomId: string, username: string) => void;
-  makeMove: (move: MoveType) => void;
-  syncGameState: (board: any, currentPlayer: PlayerType) => void;
-  notifyGameOver: (winner: PlayerType) => void;
+  makeMove: (move: Move, nextPlayer: Player) => void;
+  syncGameState: (board: Board, currentPlayer: Player) => void;
+  notifyGameOver: (winner: Player) => void;
   setMultiplayerMode: (isMultiplayer: boolean) => void;
 }
 
@@ -41,7 +48,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
-  const [playerType, setPlayerType] = useState<PlayerType | null>(null);
+  const [playerType, setPlayer] = useState<Player | null>(null);
   const [opponent, setOpponent] = useState<string | null>(null);
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [isRoomCreator, setIsRoomCreator] = useState(false);
@@ -51,7 +58,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   // Initialize socket connection when multiplayer mode is enabled
   useEffect(() => {
     if (isMultiplayer && !socket) {
-      const socketInstance = io('http://localhost:5000', {
+      const socketInstance = io(SERVER_URL, {
         transports: ['websocket'],
         autoConnect: true
       });
@@ -91,7 +98,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     socket.on('room-created', (data) => {
       console.log('Room created event received:', data);
       setRoomId(data.roomId);
-      setPlayerType(data.player);
+      setPlayer(data.player);
       setIsRoomCreator(true);
       console.log(`Room created: ${data.roomId}`);
     });
@@ -99,7 +106,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     // Room joined successfully
     socket.on('room-joined', (data) => {
       setRoomId(data.roomId);
-      setPlayerType(data.player);
+      setPlayer(data.player);
       console.log(`Joined room: ${data.roomId}`);
     });
 
@@ -172,22 +179,26 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     }
   };
 
-  // Make a move in the game
-  const makeMove = (move: MoveType) => {
+  /**
+   * Transmet un coup, accompagné du joueur à qui revient le trait ensuite.
+   * Sans cette précision le serveur alternait systématiquement les joueurs et
+   * rejetait le deuxième coup d'une rafle, ce qui désynchronisait la partie.
+   */
+  const makeMove = (move: Move, nextPlayer: Player) => {
     if (socket && isConnected && roomId) {
-      socket.emit('make-move', { roomId, move });
+      socket.emit('make-move', { roomId, move, nextPlayer });
     }
   };
 
   // Sync game state with the server
-  const syncGameState = (board: any, currentPlayer: PlayerType) => {
+  const syncGameState = (board: Board, currentPlayer: Player) => {
     if (socket && isConnected && roomId) {
       socket.emit('sync-game-state', { roomId, board, currentPlayer });
     }
   };
 
   // Notify server that the game is over
-  const notifyGameOver = (winner: PlayerType) => {
+  const notifyGameOver = (winner: Player) => {
     if (socket && isConnected && roomId) {
       socket.emit('game-over', { roomId, winner });
     }
@@ -204,7 +215,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       setSocket(null);
       setIsConnected(false);
       setRoomId(null);
-      setPlayerType(null);
+      setPlayer(null);
       setOpponent(null);
       setIsRoomCreator(false);
       setIsGameStarted(false);

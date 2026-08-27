@@ -88,29 +88,34 @@ app.prepare().then(() => {
     });
 
     // Handle player moves
-    socket.on('make-move', ({ roomId, move }) => {
+    socket.on('make-move', ({ roomId, move, nextPlayer }) => {
       const room = gameRooms.get(roomId);
-      
+
       if (!room) return;
-      
+
       // Find the player
       const playerIndex = room.players.findIndex(p => p.id === socket.id);
       if (playerIndex === -1) return;
-      
+
       const player = room.players[playerIndex];
-      
+
       // Verify it's the player's turn
       if (player.player !== room.currentPlayer) {
         socket.emit('error', { message: "It's not your turn" });
         return;
       }
-      
-      // Update game state
-      room.currentPlayer = room.currentPlayer === 'white' ? 'black' : 'white';
-      
+
+      // Le client indique à qui revient le trait. Alterner d'office ici cassait
+      // les rafles : le deuxième coup d'un enchaînement était rejeté alors que
+      // le joueur a bien le droit de rejouer.
+      room.currentPlayer =
+        nextPlayer === 'white' || nextPlayer === 'black'
+          ? nextPlayer
+          : room.currentPlayer === 'white' ? 'black' : 'white';
+
       // Broadcast the move to the other player
       socket.to(roomId).emit('opponent-move', { move });
-      
+
       console.log(`Move made in room ${roomId} by ${player.username}`);
     });
 

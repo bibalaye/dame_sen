@@ -63,11 +63,11 @@ const MultiplayerMenu: React.FC = () => {
     console.log('Rendering waiting room with roomId:', roomId || localRoomId);
     return (
       <div className={styles.waitingRoom}>
-        <h3>Salle d'attente</h3>
+        <h3>Salle d&apos;attente</h3>
         <p>Code de la salle: <span className={styles.roomCode}>{roomId || localRoomId}</span></p>
-        <p>Partagez ce code avec votre adversaire pour qu'il puisse rejoindre la partie.</p>
+        <p>Partagez ce code avec votre adversaire pour qu&apos;il puisse rejoindre la partie.</p>
         {isWaitingForOpponent ? (
-          <p className={styles.waiting}>En attente d'un adversaire...</p>
+          <p className={styles.waiting}>En attente d&apos;un adversaire…</p>
         ) : (
           <p className={styles.connected}>Adversaire connecté: {opponent}</p>
         )}
