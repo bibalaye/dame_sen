@@ -10,8 +10,9 @@
  *  - Plateau 5x5, déplacements orthogonaux uniquement (jamais en diagonale).
  *  - Un pion avance d'une case vers le camp adverse, ou se décale d'une case à
  *    gauche ou à droite. Il ne recule jamais.
- *  - Un pion capture par-dessus une pièce adverse adjacente, dans les quatre
- *    directions, en atterrissant sur la case immédiatement derrière.
+ *  - Un pion capture par-dessus une pièce adverse adjacente, en atterrissant
+ *    sur la case immédiatement derrière — devant lui ou sur les côtés, jamais
+ *    vers l'arrière : il ne prend que là où il peut se déplacer.
  *  - Une dame se déplace de plusieurs cases dans les quatre directions et
  *    capture la première pièce adverse rencontrée sur sa ligne, en atterrissant
  *    juste derrière.
@@ -191,8 +192,8 @@ export const generateCapturesForPiece = (
   const captures: Move[] = [];
   const enemy = opponentOf(piece.player);
 
-  for (const dir of ALL_DIRECTIONS) {
-    if (piece.isKing) {
+  if (piece.isKing) {
+    for (const dir of ALL_DIRECTIONS) {
       // La dame balaie sa ligne jusqu'à la première pièce rencontrée.
       let r = row + dir.row;
       let c = col + dir.col;
@@ -215,24 +216,37 @@ export const generateCapturesForPiece = (
           captureCol: c,
         });
       }
-    } else {
-      const overRow = row + dir.row;
-      const overCol = col + dir.col;
-      const target = pieceAt(board, overRow, overCol);
-      if (!target || target.player !== enemy) continue;
+    }
 
-      const landRow = overRow + dir.row;
-      const landCol = overCol + dir.col;
-      if (isInside(landRow, landCol) && !board[landRow][landCol]) {
-        captures.push({
-          fromRow: row,
-          fromCol: col,
-          toRow: landRow,
-          toCol: landCol,
-          captureRow: overRow,
-          captureCol: overCol,
-        });
-      }
+    return captures;
+  }
+
+  // Un pion prend là où il peut aller : devant lui et sur les côtés, jamais
+  // derrière. Une pièce dépassée est hors de danger.
+  const forward = forwardOf(piece.player);
+  const pawnDirections: readonly Position[] = [
+    { row: forward, col: 0 },
+    { row: 0, col: -1 },
+    { row: 0, col: 1 },
+  ];
+
+  for (const dir of pawnDirections) {
+    const overRow = row + dir.row;
+    const overCol = col + dir.col;
+    const target = pieceAt(board, overRow, overCol);
+    if (!target || target.player !== enemy) continue;
+
+    const landRow = overRow + dir.row;
+    const landCol = overCol + dir.col;
+    if (isInside(landRow, landCol) && !board[landRow][landCol]) {
+      captures.push({
+        fromRow: row,
+        fromCol: col,
+        toRow: landRow,
+        toCol: landCol,
+        captureRow: overRow,
+        captureCol: overCol,
+      });
     }
   }
 

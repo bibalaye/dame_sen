@@ -194,7 +194,7 @@ describe('captures', () => {
     assert.ok(hasMandatoryCapture(state));
   });
 
-  test('un pion prend dans les quatre directions, en arrière comprise', () => {
+  test('un pion prend sur le côté', () => {
     const state = gameFrom(
       [
         '.....',
@@ -208,6 +208,70 @@ describe('captures', () => {
     const captures = generateCapturesForPiece(state.board, 2, 2);
     assert.equal(captures.length, 1);
     assert.deepEqual(captures[0], move(2, 2, 2, 0, [2, 1]));
+  });
+
+  test('un pion prend devant lui', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        '..w..',
+        '..b..',
+        '.....',
+      ],
+      'white',
+    );
+    const captures = generateCapturesForPiece(state.board, 2, 2);
+    assert.equal(captures.length, 1);
+    assert.deepEqual(captures[0], move(2, 2, 4, 2, [3, 2]));
+  });
+
+  test('un pion blanc ne prend pas la pièce qu’il a dépassée', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        '..b..',
+        '..w..',
+        '.....',
+      ],
+      'white',
+    );
+    // Le pion noir est derrière le blanc, la case d'arrivée serait libre —
+    // mais on ne prend jamais dans son dos.
+    assert.equal(generateCapturesForPiece(state.board, 3, 2).length, 0);
+    assert.ok(!hasMandatoryCapture(state), 'aucune prise ne doit être imposée');
+  });
+
+  test('un pion noir non plus', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '..b..',
+        '..w..',
+        '.....',
+        '.....',
+      ],
+      'black',
+    );
+    // Les noirs avancent vers la rangée 0 : le blanc de (2,2) est dans leur dos.
+    assert.equal(generateCapturesForPiece(state.board, 1, 2).length, 0);
+  });
+
+  test('la dame, elle, prend dans son dos', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        '..b..',
+        '..W..',
+        '.....',
+      ],
+      'white',
+    );
+    const captures = generateCapturesForPiece(state.board, 3, 2);
+    assert.equal(captures.length, 1);
+    assert.deepEqual(captures[0], move(3, 2, 1, 2, [2, 2]));
   });
 
   test('la prise est refusée si la case d’arrivée est occupée', () => {

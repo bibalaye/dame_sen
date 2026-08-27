@@ -18,7 +18,7 @@ const RULES: ReadonlyArray<{ title: string; body: string }> = [
   },
   {
     title: 'Les prises',
-    body: 'On prend en sautant par-dessus une pièce adverse voisine, dans les quatre directions, si la case juste derrière est libre. Prendre est obligatoire : quand une prise existe, les pièces concernées sont mises en avant et les autres s’effacent.',
+    body: 'On prend en sautant par-dessus une pièce adverse voisine, si la case juste derrière est libre. Un pion prend devant lui et sur les côtés, jamais dans son dos : une pièce dépassée ne risque plus rien. Prendre est obligatoire : quand une prise existe, les pièces concernées sont mises en avant et les autres s’effacent.',
   },
   {
     title: 'Les rafles',
@@ -26,7 +26,7 @@ const RULES: ReadonlyArray<{ title: string; body: string }> = [
   },
   {
     title: 'La dame',
-    body: 'Un pion qui atteint la dernière rangée adverse devient dame, ce qui met fin à son tour. La dame glisse sur plusieurs cases dans les quatre directions et prend la première pièce adverse de sa ligne.',
+    body: 'Un pion qui atteint la dernière rangée adverse devient dame, ce qui met fin à son tour. La dame glisse sur plusieurs cases dans les quatre directions, et elle seule peut prendre en arrière.',
   },
   {
     title: 'La fin de partie',
