@@ -7,23 +7,49 @@
   z-index: 1000;
   pointer-events: none;
   padding: 20px;
+  background: rgba(18, 11, 4, 0.55);
+  backdrop-filter: blur(3px);
+  isolation: isolate;
+  animation: fadeIn 0.2s ease-out;
 }
 
 .victoryMessage,
 .gameOverMessage {
-  border-radius: 16px;
-  padding: 2rem 2.2rem;
+  border-radius: 20px;
+  padding: 2rem 1.8rem 1.6rem;
   text-align: center;
   animation: rise 0.32s cubic-bezier(0.2, 0.85, 0.25, 1);
   pointer-events: auto;
   max-width: 380px;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .victoryMessage {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-lift), 0 0 0 2px var(--brass);
+}
+
+/* Un halo tournant derrière la victoire : le moment mérite d'être marqué. */
+.victoryMessage::before {
+  content: "";
+  position: absolute;
+  width: 460px;
+  height: 460px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(201, 146, 46, 0.28) 60deg,
+    transparent 140deg,
+    rgba(201, 146, 46, 0.2) 220deg,
+    transparent 320deg
+  );
+  z-index: -1;
+  animation: halo 7s linear infinite;
 }
 
 .gameOverMessage {
@@ -93,13 +119,24 @@
   outline-offset: 3px;
 }
 
+@keyframes halo {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @keyframes rise {
   from { opacity: 0; transform: translateY(16px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .gameOverContainer,
   .victoryMessage,
+  .victoryMessage::before,
   .gameOverMessage,
   .rematch,
   .secondary {

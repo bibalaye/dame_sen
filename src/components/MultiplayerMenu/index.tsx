@@ -74,7 +74,6 @@ const MultiplayerMenu: React.FC = () => {
   if (roomId) {
     return (
       <div className={styles.waitingRoom}>
-        <h3>Salle d&apos;attente</h3>
         {status}
         <p>
           Code de la salle :{' '}
@@ -113,7 +112,6 @@ const MultiplayerMenu: React.FC = () => {
 
     return (
       <div className={styles.formContainer}>
-        <h3>{isJoining ? 'Rejoindre une partie' : 'Créer une nouvelle partie'}</h3>
         {status}
         <form onSubmit={isJoining ? handleJoinRoom : handleCreateRoom}>
           <div className={styles.formGroup}>
@@ -165,7 +163,6 @@ const MultiplayerMenu: React.FC = () => {
 
   return (
     <div className={styles.menuContainer}>
-      <h3>Jouer à distance</h3>
       {status}
       <div className={styles.buttonGroup}>
         <button type="button" className={styles.btn} onClick={() => setView('create')}>

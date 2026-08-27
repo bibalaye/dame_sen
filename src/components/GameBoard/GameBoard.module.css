@@ -1,195 +1,156 @@
-.container {
+/* Écran de partie : le plateau occupe la place, tout le reste passe en modale. */
+.screen {
   width: 100%;
-  max-width: 520px;
-  margin: 0 auto;
-  padding: 16px 16px 40px;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 16px;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
 }
 
-.topBar {
-  width: 100%;
-  display: flex;
+.hud {
+  flex: none;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+  padding: 8px 12px;
 }
 
-.title {
-  margin: 0;
-  font-size: 1.02rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+.hudTitle {
   text-align: center;
-  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.iconBtn {
-  padding: 7px 12px;
+.hudBtn {
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--line);
-  border-radius: 50px;
+  border-radius: 50%;
   background: var(--surface);
   color: var(--text-soft);
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 1.1rem;
+  line-height: 1;
   cursor: pointer;
-  white-space: nowrap;
-  transition: border-color 0.18s ease, color 0.18s ease;
+  transition: border-color 0.16s ease, color 0.16s ease;
 }
 
-.iconBtn:hover {
-  border-color: var(--green);
+.hudBtn:hover {
+  border-color: var(--brass);
   color: var(--text);
 }
 
-.iconBtn:focus-visible,
-.btn:focus-visible {
+.hudBtn:focus-visible,
+.hint:focus-visible,
+.menuItem:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
-/* Le plateau et ce qui se joue par-dessus : le bandeau de rafle s'y superpose. */
-.stage {
-  position: relative;
-  display: flex;
-  justify-content: center;
-}
-
-.infoPanel {
-  display: flex;
-  gap: 10px;
-  width: 100%;
-  max-width: 420px;
-}
-
-.playerInfo {
+/* La table : adversaire, plateau, joueur. Rien d'autre. */
+.table {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 12px 10px;
-  border-radius: 12px;
-  border: 2px solid transparent;
-  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
-}
-
-.whitePlayer {
-  background: var(--surface);
-  color: var(--text);
-  border-color: var(--line);
-}
-
-.blackPlayer {
-  background: var(--piece-dark);
-  color: var(--piece-light);
-  border-color: var(--piece-dark-edge);
-}
-
-/* Le camp au trait est mis en avant plutôt qu'annoncé par une flèche. */
-.activePlayer {
-  border-color: var(--brass);
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-soft);
-}
-
-.playerName {
-  font-size: 0.76rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  opacity: 0.78;
-}
-
-.pieceCount {
-  font-size: 1.85rem;
-  font-weight: 800;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.message {
+  justify-content: center;
+  gap: 12px;
+  padding: 4px 12px 16px;
   width: 100%;
-  max-width: 420px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  background: var(--surface);
-  border-left: 4px solid var(--brass);
-  color: var(--text);
-  text-align: center;
-  font-weight: 500;
-  min-height: 46px;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.stage {
+  position: relative;
   display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.hint {
+  margin-top: 2px;
+  padding: 10px 18px;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-soft);
-}
-
-/* Trois points qui respirent pendant que l'adversaire calcule. */
-.thinking::after {
-  content: "";
-  display: inline-block;
-  width: 1.2em;
-  text-align: left;
-  animation: dots 1.2s steps(4, end) infinite;
-}
-
-.buttons {
-  display: flex;
   gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.btn {
-  padding: 11px 20px;
   border: 1px solid var(--line);
   border-radius: 50px;
   background: var(--surface);
   color: var(--text);
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.18s ease, border-color 0.18s ease;
+  transition: transform 0.16s ease, border-color 0.16s ease;
 }
 
-.btn:hover:not(:disabled) {
+.hint:hover:not(:disabled) {
   transform: translateY(-2px);
-  border-color: var(--green);
+  border-color: var(--brass);
 }
 
-.btn:disabled {
-  opacity: 0.45;
+.hint:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.resetBtn {
+.hintCount {
+  min-width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brass);
+  color: #201404;
+  font-size: 0.74rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Menu de partie, dans la feuille modale. */
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.menuItem {
+  width: 100%;
+  padding: 15px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
+}
+
+.menuItem:hover {
+  border-color: var(--brass);
+}
+
+.menuPrimary {
   background: linear-gradient(135deg, var(--green), var(--green-deep));
   border-color: transparent;
   color: #fff;
 }
 
-.multiplayerSection {
-  width: 100%;
+.menuQuit {
+  color: var(--red);
 }
 
-@keyframes dots {
-  0% { content: ""; }
-  25% { content: "."; }
-  50% { content: ".."; }
-  75% { content: "..."; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .playerInfo,
-  .btn,
-  .iconBtn {
-    transition: none;
-  }
-
-  .thinking::after {
-    animation: none;
+@media (min-width: 640px) {
+  .table {
+    gap: 14px;
+    padding-bottom: 24px;
   }
 }

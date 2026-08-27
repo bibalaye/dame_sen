@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
+import Modal from '../Modal';
 import styles from './RulesPanel.module.css';
 
 interface RulesPanelProps {
@@ -18,7 +19,7 @@ const RULES: ReadonlyArray<{ title: string; body: string }> = [
   },
   {
     title: 'Les prises',
-    body: 'On prend en sautant par-dessus une pièce adverse voisine, si la case juste derrière est libre. Un pion prend devant lui et sur les côtés, jamais dans son dos : une pièce dépassée ne risque plus rien. Prendre est obligatoire : quand une prise existe, les pièces concernées sont mises en avant et les autres s’effacent.',
+    body: 'On prend en sautant par-dessus une pièce adverse voisine, si la case juste derrière est libre. Un pion prend devant lui et sur les côtés, jamais dans son dos : une pièce dépassée ne risque plus rien. Prendre est obligatoire — les pièces concernées sont mises en avant, les autres s’effacent.',
   },
   {
     title: 'Les rafles',
@@ -26,55 +27,25 @@ const RULES: ReadonlyArray<{ title: string; body: string }> = [
   },
   {
     title: 'La dame',
-    body: 'Un pion qui atteint la dernière rangée adverse devient dame. La dame glisse sur plusieurs cases dans les quatre directions, elle seule prend en arrière, et après une prise elle s’arrête où elle veut derrière la pièce capturée. Un camp réduit à une seule pièce la reçoit en dame d’office.',
+    body: 'Un pion qui atteint la dernière rangée adverse devient dame. Elle glisse sur plusieurs cases dans les quatre directions, elle seule prend en arrière, et après une prise elle s’arrête où elle veut derrière la pièce capturée. Un camp réduit à une seule pièce la reçoit en dame d’office.',
   },
   {
     title: 'La fin de partie',
-    body: 'On gagne en prenant toutes les pièces adverses, ou en bloquant l’adversaire au point qu’il n’ait plus aucun coup. La partie est nulle après 25 coups sans prise ni promotion, ou si la même position revient trois fois.',
+    body: 'On gagne en prenant toutes les pièces adverses, ou en bloquant l’adversaire au point qu’il n’ait plus aucun coup. Nulle après 25 coups sans prise ni promotion, ou si la même position revient trois fois.',
   },
 ];
 
-const RulesPanel: React.FC<RulesPanelProps> = ({ onClose }) => {
-  const closeRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    closeRef.current?.focus();
-
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
-
-  return (
-    <div
-      className={styles.overlay}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="rules-title"
-      onClick={onClose}
-    >
-      <div className={styles.panel} onClick={(event) => event.stopPropagation()}>
-        <h2 id="rules-title" className={styles.title}>
-          Règles du jeu
-        </h2>
-
-        <dl className={styles.list}>
-          {RULES.map((rule) => (
-            <div key={rule.title} className={styles.rule}>
-              <dt className={styles.ruleTitle}>{rule.title}</dt>
-              <dd className={styles.ruleBody}>{rule.body}</dd>
-            </div>
-          ))}
-        </dl>
-
-        <button ref={closeRef} type="button" className={styles.close} onClick={onClose}>
-          J’ai compris
-        </button>
-      </div>
-    </div>
-  );
-};
+const RulesPanel: React.FC<RulesPanelProps> = ({ onClose }) => (
+  <Modal title="Règles du jeu" onClose={onClose}>
+    <dl className={styles.list}>
+      {RULES.map((rule) => (
+        <div key={rule.title} className={styles.rule}>
+          <dt className={styles.ruleTitle}>{rule.title}</dt>
+          <dd className={styles.ruleBody}>{rule.body}</dd>
+        </div>
+      ))}
+    </dl>
+  </Modal>
+);
 
 export default RulesPanel;

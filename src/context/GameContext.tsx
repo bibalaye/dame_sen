@@ -101,6 +101,12 @@ interface GameContextType {
   status: Status;
   message: string;
   lastMove: Move | null;
+  /**
+   * Message digne d'être signalé au joueur : règle contrariée, rafle en cours,
+   * arrivée d'un adversaire. L'état permanent — à qui de jouer — est porté par
+   * le bandeau du joueur actif, pas par une bulle qui clignoterait à chaque coup.
+   */
+  alert: string | null;
   movableCells: Position[];
   mustCapture: boolean;
   /** Prises enchaînées par le tour en cours, pour le bandeau de rafle. */
@@ -308,6 +314,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     (mode === 'daily' && daily
       ? describeDaily(game, daily)
       : describe(game, mode, playerType, isThinking, timeoutLoser));
+
+  const alert =
+    notice ??
+    (game.status.kind === 'playing' && game.chainFrom
+      ? 'Rafle en cours — continuez !'
+      : game.status.kind === 'playing' && hasMandatoryCapture(game)
+        ? 'Prise obligatoire'
+        : null);
 
   /**
    * En mode « autour du plateau », chacun doit voir ses pièces devant soi : le
@@ -742,6 +756,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       status: game.status,
       message,
       lastMove: game.lastMove,
+      alert,
       movableCells,
       mustCapture,
       chainLength: game.chainLength,
@@ -779,6 +794,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       joinRoom,
     }),
     [
+      alert,
       bestChain,
       blackPieces,
       clock,

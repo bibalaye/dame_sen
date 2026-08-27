@@ -1,0 +1,33 @@
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%);
+  z-index: 30;
+  max-width: min(92vw, 380px);
+  padding: 9px 16px;
+  border-radius: 50px;
+  background: rgba(28, 18, 8, 0.92);
+  color: #f6ecd9;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  animation: slide 0.24s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+@keyframes slide {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}

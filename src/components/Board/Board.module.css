@@ -1,6 +1,7 @@
 .boardWrapper {
   position: relative;
-  padding: 18px;
+  width: min(92vw, 400px);
+  padding: 14px;
   border-radius: 12px;
   /* Une planche de bois, pas un dégradé : le grain vient de bandes fines
      superposées à la couleur de fond. */
@@ -51,7 +52,7 @@
   overflow: hidden;
   transition: transform 0.45s cubic-bezier(0.65, 0, 0.35, 1);
   aspect-ratio: 1;
-  width: min(74vw, 360px);
+  width: 100%;
 }
 
 /* Mode « autour du plateau » : la planche pivote vers le joueur qui prend la
@@ -156,9 +157,10 @@
   50% { transform: scale(1.07); }
 }
 
-@media (min-width: 720px) {
-  .board {
-    width: 380px;
+@media (min-width: 640px) {
+  .boardWrapper {
+    width: 420px;
+    padding: 18px;
   }
 }
 

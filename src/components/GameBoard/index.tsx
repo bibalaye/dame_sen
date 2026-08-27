@@ -2,15 +2,19 @@
 
 import React, { useState } from 'react';
 import Board from '../Board';
-import ClockDisplay from '../ClockDisplay';
 import ComboBanner from '../ComboBanner';
-import GameOverAnimation from '../GameOverAnimation';
-import MultiplayerMenu from '../MultiplayerMenu';
-import RulesPanel from '../RulesPanel';
 import DailyPanel from '../DailyPanel';
+import GameOverAnimation from '../GameOverAnimation';
+import Modal from '../Modal';
+import MultiplayerMenu from '../MultiplayerMenu';
+import PlayerBar from '../PlayerBar';
+import RulesPanel from '../RulesPanel';
+import Toast from '../Toast';
 import { OPPONENTS } from '../HomeScreen';
 import { useGameContext } from '@/context/GameContext';
 import styles from './GameBoard.module.css';
+
+type Sheet = 'menu' | 'rules' | 'room' | null;
 
 const GameBoard = () => {
   const {
@@ -18,7 +22,7 @@ const GameBoard = () => {
     currentPlayer,
     whitePieces,
     blackPieces,
-    message,
+    alert,
     gameOver,
     winner,
     status,
@@ -29,137 +33,201 @@ const GameBoard = () => {
     clock,
     muted,
     isFlipped,
+    roomId,
+    opponent,
+    isWaitingForOpponent,
+    daily,
+    series,
+    bestChain,
     requestHint,
     resetGame,
     goHome,
     toggleMute,
-    series,
-    bestChain,
     shareResult,
   } = useGameContext();
 
-  const [showRules, setShowRules] = useState(false);
+  const [sheet, setSheet] = useState<Sheet>(null);
 
-  const opponent = OPPONENTS.find((entry) => entry.id === difficulty);
-  const isDraw = status.kind === 'draw';
+  const character = OPPONENTS.find((entry) => entry.id === difficulty);
+  const startingPieces = mode === 'daily' ? Math.max(whitePieces, blackPieces, 1) : 12;
 
-  const blackName =
-    mode === 'solo' ? (opponent?.name ?? 'Noirs') : 'Noirs';
-  const whiteName = mode === 'solo' ? 'Vous' : 'Blancs';
+  const names =
+    mode === 'solo'
+      ? { white: 'Vous', black: character?.name ?? 'Noirs' }
+      : mode === 'online'
+        ? { white: 'Blancs', black: opponent ?? 'Noirs' }
+        : { white: 'Blancs', black: 'Noirs' };
 
-  // En mode « autour du plateau », le panneau du joueur au trait passe devant.
-  const panels = [
-    { player: 'white' as const, name: whiteName, count: whitePieces },
-    { player: 'black' as const, name: blackName, count: blackPieces },
-  ];
-  const ordered = isFlipped ? [...panels].reverse() : panels;
+  const subtitles: Record<'white' | 'black', string | undefined> =
+    mode === 'solo'
+      ? { white: undefined, black: character?.tagline }
+      : mode === 'daily' && daily
+        ? {
+            white: `${daily.attempts.length + 1}ᵉ essai sur ${3}`,
+            black: `objectif : ${daily.puzzle.target} prises`,
+          }
+        : { white: undefined, black: undefined };
+
+  // L'adversaire est en haut, le joueur en bas — comme autour d'une table.
+  const top = isFlipped ? 'white' : 'black';
+  const bottom = isFlipped ? 'black' : 'white';
+  const pieces = { white: whitePieces, black: blackPieces } as const;
+
+  // La salle d'attente s'impose tant que personne n'est en face ; dès que
+  // l'adversaire arrive, elle disparaît et laisse le plateau seul à l'écran.
+  const roomPending = mode === 'online' && (!roomId || isWaitingForOpponent);
+  const showRoom = sheet === 'room' || roomPending;
 
   return (
-    <div className={styles.container}>
-      <header className={styles.topBar}>
-        <button type="button" className={styles.iconBtn} onClick={goHome}>
-          ← Accueil
-        </button>
-        <h1 className={styles.title}>Dames sénégalaises</h1>
+    <div className={styles.screen}>
+      <header className={styles.hud}>
         <button
           type="button"
-          className={styles.iconBtn}
-          onClick={toggleMute}
-          aria-pressed={muted}
-          aria-label={muted ? 'Activer le son' : 'Couper le son'}
+          className={styles.hudBtn}
+          onClick={goHome}
+          aria-label="Retour à l’accueil"
         >
-          {muted ? 'Son coupé' : 'Son actif'}
+          ←
+        </button>
+
+        <span className={styles.hudTitle}>
+          {mode === 'daily' && daily
+            ? `Défi n°${daily.puzzle.number}`
+            : mode === 'online'
+              ? 'Partie en ligne'
+              : mode === 'pass'
+                ? 'Autour du plateau'
+                : 'Partie solo'}
+        </span>
+
+        <button
+          type="button"
+          className={styles.hudBtn}
+          onClick={() => setSheet('menu')}
+          aria-label="Menu de la partie"
+        >
+          ⋯
         </button>
       </header>
 
-      <div className={styles.stage}>
-        <Board />
-        <ComboBanner chainLength={chainLength} />
-      </div>
+      <main className={styles.table}>
+        <PlayerBar
+          side={top}
+          name={names[top]}
+          subtitle={subtitles[top]}
+          pieces={pieces[top]}
+          total={startingPieces}
+          isActive={currentPlayer === top && !gameOver}
+          isThinking={isThinking && top === 'black'}
+          clock={clock}
+        />
 
-      <div className={styles.infoPanel}>
-        {ordered.map((panel) => (
-          <div
-            key={panel.player}
-            className={[
-              styles.playerInfo,
-              panel.player === 'white' ? styles.whitePlayer : styles.blackPlayer,
-              currentPlayer === panel.player ? styles.activePlayer : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            <span className={styles.playerName}>{panel.name}</span>
-            <span className={styles.pieceCount}>{panel.count}</span>
-            <ClockDisplay
-              clock={clock}
-              player={panel.player}
-              isRunning={clock.running === panel.player}
-            />
-          </div>
-        ))}
-      </div>
-
-      <div
-        className={`${styles.message} ${isThinking ? styles.thinking : ''}`}
-        role="status"
-        aria-live="polite"
-      >
-        {message}
-      </div>
-
-      {mode === 'daily' && <DailyPanel />}
-
-      <div className={styles.buttons}>
-        {mode !== 'daily' && (
-          <button
-            type="button"
-            className={`${styles.btn} ${styles.resetBtn}`}
-            onClick={resetGame}
-          >
-            Nouvelle partie
-          </button>
-        )}
-        {mode === 'solo' && (
-          <button
-            type="button"
-            className={styles.btn}
-            onClick={requestHint}
-            disabled={gameOver || hintsLeft === 0 || currentPlayer !== 'white'}
-          >
-            Un conseil ? ({hintsLeft})
-          </button>
-        )}
-        <button
-          type="button"
-          className={styles.btn}
-          onClick={() => setShowRules(true)}
-        >
-          Règles
-        </button>
-      </div>
-
-      {mode === 'online' && (
-        <div className={styles.multiplayerSection}>
-          <MultiplayerMenu />
+        <div className={styles.stage}>
+          <Toast message={alert ?? ''} mute={gameOver} />
+          <Board />
+          <ComboBanner chainLength={chainLength} />
         </div>
+
+        <PlayerBar
+          side={bottom}
+          name={names[bottom]}
+          subtitle={subtitles[bottom]}
+          pieces={pieces[bottom]}
+          total={startingPieces}
+          isActive={currentPlayer === bottom && !gameOver}
+          isThinking={isThinking && bottom === 'black'}
+          clock={clock}
+        />
+
+        {/* Une seule action reste à portée de pouce pendant la partie. */}
+        {mode === 'solo' && !gameOver && (
+          <button
+            type="button"
+            className={styles.hint}
+            onClick={requestHint}
+            disabled={hintsLeft === 0 || currentPlayer !== 'white'}
+          >
+            Un conseil ?<span className={styles.hintCount}>{hintsLeft}</span>
+          </button>
+        )}
+      </main>
+
+      {sheet === 'menu' && (
+        <Modal title="Partie" onClose={() => setSheet(null)}>
+          <div className={styles.menu}>
+            {mode !== 'daily' && (
+              <button
+                type="button"
+                className={`${styles.menuItem} ${styles.menuPrimary}`}
+                onClick={() => {
+                  resetGame();
+                  setSheet(null);
+                }}
+              >
+                Nouvelle partie
+              </button>
+            )}
+
+            <button
+              type="button"
+              className={styles.menuItem}
+              onClick={() => setSheet('rules')}
+            >
+              Règles du jeu
+            </button>
+
+            <button type="button" className={styles.menuItem} onClick={toggleMute}>
+              {muted ? 'Activer le son' : 'Couper le son'}
+            </button>
+
+            {mode === 'online' && roomId && (
+              <button
+                type="button"
+                className={styles.menuItem}
+                onClick={() => setSheet('room')}
+              >
+                Salle et invitation
+              </button>
+            )}
+
+            <button
+              type="button"
+              className={`${styles.menuItem} ${styles.menuQuit}`}
+              onClick={goHome}
+            >
+              Quitter la partie
+            </button>
+          </div>
+        </Modal>
       )}
+
+      {sheet === 'rules' && <RulesPanel onClose={() => setSheet(null)} />}
+
+      {showRoom && (
+        <Modal
+          title="Jouer à distance"
+          dismissible={!roomPending}
+          onClose={() => setSheet(null)}
+        >
+          <MultiplayerMenu />
+        </Modal>
+      )}
+
+      {mode === 'daily' && daily && <DailyPanel />}
 
       {mode !== 'daily' && (
-      <GameOverAnimation
-        winner={winner}
-        isDraw={isDraw}
-        isVisible={gameOver}
-        mode={mode}
-        series={series}
-        bestChain={bestChain}
-        onRematch={resetGame}
-        onHome={goHome}
-        onShare={shareResult}
-      />
+        <GameOverAnimation
+          winner={winner}
+          isDraw={status.kind === 'draw'}
+          isVisible={gameOver}
+          mode={mode}
+          series={series}
+          bestChain={bestChain}
+          onRematch={resetGame}
+          onHome={goHome}
+          onShare={shareResult}
+        />
       )}
-
-      {showRules && <RulesPanel onClose={() => setShowRules(false)} />}
     </div>
   );
 };
