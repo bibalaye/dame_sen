@@ -270,8 +270,8 @@ describe('captures', () => {
       'white',
     );
     const captures = generateCapturesForPiece(state.board, 3, 2);
-    assert.equal(captures.length, 1);
-    assert.deepEqual(captures[0], move(3, 2, 1, 2, [2, 2]));
+    assert.ok(captures.length > 0);
+    assert.ok(captures.every((capture) => capture.captureRow === 2));
   });
 
   test('la prise est refusée si la case d’arrivée est occupée', () => {
@@ -375,10 +375,10 @@ describe('rafles', () => {
     assert.equal(next.chainFrom, null);
   });
 
-  test('une promotion met fin au tour même si une prise reste possible', () => {
+  test('devenir dame en pleine rafle ne l’interrompt pas', () => {
     const state = gameFrom(
       [
-        '.....',
+        'w....',
         '.....',
         'w.b..',
         'b....',
@@ -387,13 +387,23 @@ describe('rafles', () => {
       'white',
     );
 
-    // Le pion prend en (3,0), atterrit sur la rangée de promotion et devient
-    // dame. Sans la règle, cette dame pourrait reprendre en (4,1).
+    // Le pion prend en (3,0) et atterrit sur la rangée de promotion : il devient
+    // dame, et poursuit la rafle avec la portée d'une dame.
     const promoted = playMove(state, move(2, 0, 4, 0, [3, 0]));
 
-    assert.equal(promoted.board[4][0]?.isKing, true);
-    assert.equal(promoted.currentPlayer, 'black', 'la promotion rend la main');
-    assert.equal(promoted.chainFrom, null);
+    assert.equal(promoted.board[4][0]?.isKing, true, 'la pièce est promue');
+    assert.equal(promoted.lastPromotion, true);
+    assert.equal(promoted.currentPlayer, 'white', 'le trait ne change pas');
+    assert.deepEqual(promoted.chainFrom, { row: 4, col: 0 });
+
+    // La nouvelle dame reprend en (4,1), et choisit sa case d'arrivée.
+    const nextCaptures = legalMoves(promoted);
+    assert.ok(nextCaptures.length > 0);
+    assert.ok(nextCaptures.every((capture) => capture.captureCol === 1));
+    assert.ok(
+      nextCaptures.length > 1,
+      'la dame doit avoir le choix entre plusieurs cases d’arrivée',
+    );
   });
 });
 
@@ -646,7 +656,7 @@ describe('retour sur le dernier coup', () => {
   test('une rafle triple est comptée comme telle', () => {
     let state = gameFrom(
       [
-        '.....',
+        'w....',
         '.....',
         'wb.b.',
         '....b',
@@ -700,5 +710,144 @@ describe('retour sur le dernier coup', () => {
     );
     const next = playMove(state, move(3, 2, 4, 2));
     assert.equal(next.lastPromotion, true);
+  });
+});
+
+describe('la dame vole', () => {
+  test('elle choisit sa case d’arrivée après une prise', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        'Wb...',
+        '.....',
+        '.....',
+      ],
+      'white',
+    );
+
+    // La dame prend en (2,1) ; au-delà, trois cases sont libres.
+    const captures = generateCapturesForPiece(state.board, 2, 0);
+    const landings = captures.map((capture) => capture.toCol).sort();
+
+    assert.deepEqual(landings, [2, 3, 4]);
+    assert.ok(captures.every((capture) => capture.captureCol === 1));
+  });
+
+  test('elle s’arrête avant la pièce suivante', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        'Wb..w',
+        '.....',
+        '.....',
+      ],
+      'white',
+    );
+
+    // La case (2,4) est occupée par une pièce amie : elle borne l'atterrissage.
+    const landings = generateCapturesForPiece(state.board, 2, 0)
+      .map((capture) => capture.toCol)
+      .sort();
+    assert.deepEqual(landings, [2, 3]);
+  });
+
+  test('la case choisie décide de la suite de la rafle', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        'Wb...',
+        '...b.',
+        '.....',
+      ],
+      'white',
+    );
+
+    // En s'arrêtant en (2,3), la dame se place au contact du pion de (3,3).
+    const chained = playMove(state, move(2, 0, 2, 3, [2, 1]));
+    assert.equal(chained.currentPlayer, 'white', 'la rafle continue');
+
+    // En allant jusqu'au bout, elle laisse passer la seconde prise.
+    const stopped = playMove(state, move(2, 0, 2, 4, [2, 1]));
+    assert.equal(stopped.currentPlayer, 'black', 'la rafle s’arrête');
+  });
+
+  test('un pion, lui, atterrit juste derrière', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        'wb...',
+        '.....',
+        '.....',
+      ],
+      'white',
+    );
+    const captures = generateCapturesForPiece(state.board, 2, 0);
+    assert.equal(captures.length, 1);
+    assert.equal(captures[0].toCol, 2);
+  });
+});
+
+describe('dernière pièce d’un camp', () => {
+  test('elle est promue dame d’office, dans les deux camps', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        '.bw..',
+        '.....',
+        'b....',
+      ],
+      'white',
+    );
+
+    // Les blancs prennent : le camp noir tombe à une pièce, le camp blanc en
+    // avait déjà une seule. Les deux survivants passent dame.
+    const next = playMove(state, move(2, 2, 2, 0, [2, 1]));
+
+    assert.equal(next.board[2][0]?.isKing, true, 'le survivant blanc est promu');
+    assert.equal(next.board[4][0]?.isKing, true, 'le survivant noir aussi');
+  });
+
+  test('à deux pièces, rien n’est promu', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        '.bw..',
+        '.....',
+        'bb...',
+      ],
+      'white',
+    );
+    const next = playMove(state, move(2, 2, 2, 0, [2, 1]));
+
+    // Les noirs gardent deux pièces : aucune promotion d'office.
+    assert.equal(next.board[4][0]?.isKing, false);
+    assert.equal(next.board[4][1]?.isKing, false);
+  });
+
+  test('la promotion d’office donne bien la portée d’une dame', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        '.bw..',
+        '.....',
+        'b....',
+      ],
+      'white',
+    );
+    const next = playMove(state, move(2, 2, 2, 0, [2, 1]));
+
+    // Le survivant noir, désormais dame, balaie sa colonne et sa rangée.
+    const blackMoves = generateMoves(next.board, 'black');
+    assert.ok(
+      blackMoves.some((candidate) => candidate.toRow === 0),
+      'la dame doit pouvoir remonter toute la colonne',
+    );
   });
 });

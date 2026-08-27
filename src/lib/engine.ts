@@ -14,14 +14,16 @@
  *    sur la case immédiatement derrière — devant lui ou sur les côtés, jamais
  *    vers l'arrière : il ne prend que là où il peut se déplacer.
  *  - Une dame se déplace de plusieurs cases dans les quatre directions et
- *    capture la première pièce adverse rencontrée sur sa ligne, en atterrissant
- *    juste derrière.
+ *    capture la première pièce adverse rencontrée sur sa ligne. Elle vole :
+ *    elle choisit librement sa case d'arrivée parmi les cases libres situées
+ *    au-delà de la pièce prise.
  *  - La capture est obligatoire : s'il existe au moins une prise, seules les
  *    prises sont légales.
  *  - Les prises s'enchaînent : tant que la pièce qui vient de prendre peut
  *    reprendre, le trait reste au même joueur avec cette pièce.
- *  - Un pion qui atteint la dernière rangée adverse devient dame, et cela met
- *    fin à son tour (une promotion interrompt une rafle en cours).
+ *  - Un pion qui atteint la dernière rangée adverse devient dame. S'il était en
+ *    pleine rafle, il la poursuit avec sa nouvelle portée.
+ *  - Réduit à une seule pièce, un camp la reçoit en dame d'office.
  */
 
 export const BOARD_SIZE = 5;
@@ -204,9 +206,11 @@ export const generateCapturesForPiece = (
       if (!isInside(r, c)) continue;
       if (board[r][c]!.player !== enemy) continue;
 
-      const landRow = r + dir.row;
-      const landCol = c + dir.col;
-      if (isInside(landRow, landCol) && !board[landRow][landCol]) {
+      // La dame vole : elle peut s'arrêter sur n'importe quelle case libre
+      // au-delà de la pièce prise, pas seulement sur la première.
+      let landRow = r + dir.row;
+      let landCol = c + dir.col;
+      while (isInside(landRow, landCol) && !board[landRow][landCol]) {
         captures.push({
           fromRow: row,
           fromCol: col,
@@ -215,6 +219,8 @@ export const generateCapturesForPiece = (
           captureRow: r,
           captureCol: c,
         });
+        landRow += dir.row;
+        landCol += dir.col;
       }
     }
 
@@ -349,6 +355,42 @@ export const countPieces = (board: Board, player: Player): number => {
   return total;
 };
 
+/**
+ * Promeut d'office la dernière pièce d'un camp.
+ *
+ * Réduit à une seule pièce, un joueur la reçoit en dame : sans cela, un pion
+ * isolé ne peut ni reculer ni couvrir ses arrières, et la fin de partie n'est
+ * plus qu'une poursuite jouée d'avance. La règle vaut pour les deux camps.
+ *
+ * Renvoie le plateau reçu tel quel quand rien ne change.
+ */
+export const promoteLoneSurvivor = (board: Board): Board => {
+  let promoted: Square[][] | null = null;
+
+  for (const player of ['white', 'black'] as const) {
+    let found: Position | null = null;
+    let count = 0;
+
+    for (let row = 0; row < BOARD_SIZE && count < 2; row++) {
+      for (let col = 0; col < BOARD_SIZE && count < 2; col++) {
+        if (board[row][col]?.player !== player) continue;
+        count++;
+        found = { row, col };
+      }
+    }
+
+    if (count !== 1 || !found) continue;
+
+    const piece = board[found.row][found.col]!;
+    if (piece.isKing) continue;
+
+    promoted = promoted ?? cloneBoard(board);
+    promoted[found.row][found.col] = { player, isKing: true };
+  }
+
+  return promoted ?? board;
+};
+
 export interface AppliedMove {
   readonly board: Board;
   readonly captured: Piece | null;
@@ -445,12 +487,14 @@ export const playMove = (state: GameState, move: Move): GameState => {
   const legal = legalMoves(state).find((candidate) => isSameMove(candidate, move));
   if (!legal) return state;
 
-  const { board, captured, promoted } = applyMove(state.board, legal);
+  const applied = applyMove(state.board, legal);
+  const { captured, promoted } = applied;
+  const board = promoteLoneSurvivor(applied.board);
 
-  // Une prise appelle la suivante, sauf si la pièce vient d'être promue.
+  // Une prise appelle la suivante. Devenir dame en cours de rafle n'y met pas
+  // fin : la pièce poursuit l'enchaînement, désormais avec la portée d'une dame.
   const canChain =
     captured !== null &&
-    !promoted &&
     generateCapturesForPiece(board, legal.toRow, legal.toCol).length > 0;
 
   const capturedAt =

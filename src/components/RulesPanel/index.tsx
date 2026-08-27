@@ -22,11 +22,11 @@ const RULES: ReadonlyArray<{ title: string; body: string }> = [
   },
   {
     title: 'Les rafles',
-    body: 'Si la pièce qui vient de prendre peut reprendre, elle continue et le tour ne change pas. C’est le meilleur moment du jeu : une rafle peut renverser une partie.',
+    body: 'Si la pièce qui vient de prendre peut reprendre, elle continue et le tour ne change pas. Un pion qui devient dame au milieu d’une rafle la poursuit, avec sa nouvelle portée. C’est le meilleur moment du jeu : une rafle peut renverser une partie.',
   },
   {
     title: 'La dame',
-    body: 'Un pion qui atteint la dernière rangée adverse devient dame, ce qui met fin à son tour. La dame glisse sur plusieurs cases dans les quatre directions, et elle seule peut prendre en arrière.',
+    body: 'Un pion qui atteint la dernière rangée adverse devient dame. La dame glisse sur plusieurs cases dans les quatre directions, elle seule prend en arrière, et après une prise elle s’arrête où elle veut derrière la pièce capturée. Un camp réduit à une seule pièce la reçoit en dame d’office.',
   },
   {
     title: 'La fin de partie',
