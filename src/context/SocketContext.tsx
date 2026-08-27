@@ -4,12 +4,32 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { io, Socket } from 'socket.io-client';
 import type { Board, Move, Player } from '@/lib/engine';
 
+/** Port sur lequel `npm run server` expose le serveur temps réel. */
+const REALTIME_PORT = '5000';
+
 /**
- * Adresse du serveur temps réel. Codée en dur sur localhost auparavant, ce
- * qui rendait le multijoueur injouable ailleurs que sur le poste de
- * développement. Vide, on se rabat sur l'origine de la page.
+ * Adresse du serveur temps réel.
+ *
+ * En production, la page et les websockets sont servies par la même origine.
+ * En développement, `npm run dev` ne lance que Next : le serveur socket.io vit
+ * dans server.js, sur son propre port. Sans cette bascule, le client tentait de
+ * se connecter à une origine qui n'écoute pas, et le multijoueur échouait sans
+ * explication.
  */
-const SERVER_URL = process.env.NEXT_PUBLIC_SOCKET_URL ?? '';
+const resolveServerUrl = (): string => {
+  const configured = process.env.NEXT_PUBLIC_SOCKET_URL;
+  if (configured) return configured;
+  if (typeof window === 'undefined') return '';
+
+  const { protocol, hostname, port } = window.location;
+  if (process.env.NODE_ENV === 'development' && port && port !== REALTIME_PORT) {
+    return `${protocol}//${hostname}:${REALTIME_PORT}`;
+  }
+  return '';
+};
+
+/** Délai au-delà duquel on considère le serveur injoignable. */
+const CONNECT_TIMEOUT_MS = 8000;
 
 // Define the shape of our socket context
 interface SocketContextType {
@@ -58,31 +78,46 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   // Initialize socket connection when multiplayer mode is enabled
   useEffect(() => {
     if (isMultiplayer && !socket) {
-      const socketInstance = io(SERVER_URL, {
-        transports: ['websocket'],
-        autoConnect: true
+      const url = resolveServerUrl();
+      // Le repli en polling permet de se connecter là où les websockets sont
+      // filtrés — proxys d'entreprise, certains réseaux mobiles.
+      const socketInstance = io(url, {
+        transports: ['websocket', 'polling'],
+        autoConnect: true,
       });
 
       setSocket(socketInstance);
+      setError(null);
 
-      // Socket event listeners
+      const timeout = setTimeout(() => {
+        if (!socketInstance.connected) {
+          setError(
+            'Le serveur de jeu ne répond pas. En développement, lancez « npm run server ».',
+          );
+        }
+      }, CONNECT_TIMEOUT_MS);
+
       socketInstance.on('connect', () => {
         setIsConnected(true);
-        console.log('Connected to server');
+        setError(null);
+        clearTimeout(timeout);
       });
 
       socketInstance.on('disconnect', () => {
         setIsConnected(false);
-        console.log('Disconnected from server');
+      });
+
+      socketInstance.on('connect_error', (cause) => {
+        setIsConnected(false);
+        console.warn('Connexion au serveur de jeu impossible :', cause.message);
       });
 
       socketInstance.on('error', (data) => {
-        setError(data.message);
-        console.error('Socket error:', data.message);
+        setError(data?.message ?? 'Erreur du serveur de jeu.');
       });
 
-      // Clean up on unmount
       return () => {
+        clearTimeout(timeout);
         socketInstance.disconnect();
         setSocket(null);
         setIsConnected(false);
@@ -159,24 +194,30 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     };
   }, [socket]);
 
-  // Create a new game room
+  /**
+   * Crée une salle.
+   *
+   * On n'exige plus que la connexion soit déjà établie : socket.io met les
+   * émissions en attente et les envoie dès la poignée de main terminée. Refuser
+   * le clic parce que la connexion prenait une demi-seconde de plus était la
+   * cause de l'échec « Socket not connected ».
+   */
   const createRoom = (username: string) => {
-    if (socket && isConnected) {
-      console.log('Emitting create-room event with username:', username);
-      socket.emit('create-room', username);
-    } else {
-      console.error('Cannot create room: Socket not connected');
-      setError('Not connected to server');
+    if (!socket) {
+      setError('Le mode en ligne n’est pas encore prêt, réessayez.');
+      return;
     }
+    setError(null);
+    socket.emit('create-room', username);
   };
 
-  // Join an existing game room
   const joinRoom = (roomId: string, username: string) => {
-    if (socket && isConnected) {
-      socket.emit('join-room', { roomId, username });
-    } else {
-      setError('Not connected to server');
+    if (!socket) {
+      setError('Le mode en ligne n’est pas encore prêt, réessayez.');
+      return;
     }
+    setError(null);
+    socket.emit('join-room', { roomId, username });
   };
 
   /**
@@ -185,21 +226,21 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
    * rejetait le deuxième coup d'une rafle, ce qui désynchronisait la partie.
    */
   const makeMove = (move: Move, nextPlayer: Player) => {
-    if (socket && isConnected && roomId) {
+    if (socket && roomId) {
       socket.emit('make-move', { roomId, move, nextPlayer });
     }
   };
 
   // Sync game state with the server
   const syncGameState = (board: Board, currentPlayer: Player) => {
-    if (socket && isConnected && roomId) {
+    if (socket && roomId) {
       socket.emit('sync-game-state', { roomId, board, currentPlayer });
     }
   };
 
   // Notify server that the game is over
   const notifyGameOver = (winner: Player) => {
-    if (socket && isConnected && roomId) {
+    if (socket && roomId) {
       socket.emit('game-over', { roomId, winner });
     }
   };

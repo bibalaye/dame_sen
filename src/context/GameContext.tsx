@@ -122,6 +122,10 @@ interface GameContextType {
   playerType: Player | null;
   opponent: string | null;
   isWaitingForOpponent: boolean;
+  /** Vrai tant que la liaison avec le serveur de jeu n'est pas établie. */
+  isConnecting: boolean;
+  /** Message d'erreur du serveur de jeu, à afficher au joueur. */
+  connectionError: string | null;
   bestChain: number;
   series: { white: number; black: number };
   shareResult: () => void;
@@ -221,6 +225,8 @@ const describe = (
 export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const {
     socket,
+    isConnected,
+    error: socketError,
     roomId,
     playerType,
     opponent,
@@ -754,6 +760,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       playerType,
       opponent,
       isWaitingForOpponent,
+      isConnecting: isMultiplayer && !isConnected,
+      connectionError: socketError,
       bestChain,
       series,
       shareResult,
@@ -786,8 +794,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       hintsLeft,
       isFlipped,
       invitedRoom,
+      isConnected,
       isMultiplayer,
       isThinking,
+      socketError,
       isWaitingForOpponent,
       joinRoom,
       message,

@@ -151,3 +151,29 @@
   color: var(--text-soft);
   line-height: 1.4;
 }
+
+/* L'état de la liaison, visible à l'écran plutôt que dans la console. */
+.connecting,
+.error {
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.connecting {
+  background: var(--surface-sunk);
+  color: var(--text-soft);
+}
+
+.error {
+  background: color-mix(in srgb, var(--red) 16%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
+  color: var(--text);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

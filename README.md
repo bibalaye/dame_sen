@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Dames sénégalaises
 
-## Getting Started
+Le jeu de dames à la sénégalaise : plateau 5×5, déplacements en ligne droite,
+prises obligatoires et rafles.
 
-First, run the development server:
+## Lancer le jeu
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`npm run dev` suffit pour le **solo**, le mode **autour du plateau** et le
+**défi du jour**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Le mode en ligne a besoin du serveur temps réel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Les parties à distance passent par socket.io, servi par `server.js` :
 
-## Learn More
+```bash
+npm run server     # http://localhost:5000 — le jeu et les websockets
+```
 
-To learn more about Next.js, take a look at the following resources:
+Ouvrez alors `http://localhost:5000`. C'est la façon la plus simple de jouer à
+deux : une seule commande sert la page et les échanges temps réel.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Si vous préférez garder le rechargement à chaud de `npm run dev`, lancez les
+deux commandes en parallèle : le client détecte qu'il n'est pas servi par le
+port temps réel et se connecte automatiquement au port 5000.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Pour un serveur hébergé ailleurs, renseignez son adresse :
 
-## Deploy on Vercel
+```bash
+# .env.local
+NEXT_PUBLIC_SOCKET_URL=https://exemple.com
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Tests
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm test           # règles, IA, pendule, défi du jour, intégration
+npm run lint
+npm run build
+```
+
+Les tests tournent avec le lanceur intégré de Node : aucune dépendance
+supplémentaire à installer.
+
+## Les règles, telles qu'implémentées
+
+- Plateau 5×5. Tout se joue en ligne droite, jamais en diagonale.
+- Un pion avance d'une case vers le camp adverse, ou se décale à gauche ou à
+  droite. Il ne recule jamais.
+- Un pion prend devant lui et sur les côtés, **jamais dans son dos** : une pièce
+  dépassée ne risque plus rien.
+- La dame glisse dans les quatre directions, prend en arrière, et **choisit sa
+  case d'arrivée** parmi les cases libres au-delà de la pièce capturée.
+- Prendre est obligatoire. Les prises s'enchaînent, et devenir dame en pleine
+  rafle ne l'interrompt pas.
+- Un camp réduit à une seule pièce la reçoit **en dame d'office**.
+- Nulle après 25 coups sans prise ni promotion, ou sur triple répétition.
+
+## Organisation
+
+| Chemin | Rôle |
+| --- | --- |
+| `src/lib/engine.ts` | Règles du jeu, pures et testables |
+| `src/lib/ai.ts` | Adversaire : negamax alpha-bêta, quatre niveaux |
+| `src/lib/clock.ts` | Pendule (blitz, éclair) |
+| `src/lib/daily.ts` | Défi du jour et série |
+| `src/lib/pieceLayer.ts` | Identité des pièces, pour les animer |
+| `src/lib/sound.ts` | Sons synthétisés, sans fichier audio |
+| `server.js` | Serveur socket.io des parties à distance |

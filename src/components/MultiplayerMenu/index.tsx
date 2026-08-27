@@ -14,6 +14,8 @@ const MultiplayerMenu: React.FC = () => {
     isWaitingForOpponent,
     playerType,
     invitedRoom,
+    isConnecting,
+    connectionError,
   } = useGameContext();
 
   const [username, setUsername] = useState('');
@@ -61,10 +63,19 @@ const MultiplayerMenu: React.FC = () => {
     }
   };
 
+  const status = connectionError ? (
+    <p className={styles.error} role="alert">
+      {connectionError}
+    </p>
+  ) : isConnecting ? (
+    <p className={styles.connecting}>Connexion au serveur de jeu…</p>
+  ) : null;
+
   if (roomId) {
     return (
       <div className={styles.waitingRoom}>
         <h3>Salle d&apos;attente</h3>
+        {status}
         <p>
           Code de la salle :{' '}
           <span className={styles.roomCode}>{roomId}</span>
@@ -103,6 +114,7 @@ const MultiplayerMenu: React.FC = () => {
     return (
       <div className={styles.formContainer}>
         <h3>{isJoining ? 'Rejoindre une partie' : 'Créer une nouvelle partie'}</h3>
+        {status}
         <form onSubmit={isJoining ? handleJoinRoom : handleCreateRoom}>
           <div className={styles.formGroup}>
             <label htmlFor="username">Votre nom</label>
@@ -131,8 +143,12 @@ const MultiplayerMenu: React.FC = () => {
           )}
 
           <div className={styles.buttonGroup}>
-            <button type="submit" className={styles.btn}>
-              {isJoining ? 'Rejoindre' : 'Créer la partie'}
+            <button type="submit" className={styles.btn} disabled={!!connectionError}>
+              {isConnecting
+                ? 'Connexion…'
+                : isJoining
+                  ? 'Rejoindre'
+                  : 'Créer la partie'}
             </button>
             <button
               type="button"
@@ -150,6 +166,7 @@ const MultiplayerMenu: React.FC = () => {
   return (
     <div className={styles.menuContainer}>
       <h3>Jouer à distance</h3>
+      {status}
       <div className={styles.buttonGroup}>
         <button type="button" className={styles.btn} onClick={() => setView('create')}>
           Créer une partie
