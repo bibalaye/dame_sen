@@ -7,6 +7,7 @@ import ComboBanner from '../ComboBanner';
 import GameOverAnimation from '../GameOverAnimation';
 import MultiplayerMenu from '../MultiplayerMenu';
 import RulesPanel from '../RulesPanel';
+import DailyPanel from '../DailyPanel';
 import { OPPONENTS } from '../HomeScreen';
 import { useGameContext } from '@/context/GameContext';
 import styles from './GameBoard.module.css';
@@ -32,6 +33,9 @@ const GameBoard = () => {
     resetGame,
     goHome,
     toggleMute,
+    series,
+    bestChain,
+    shareResult,
   } = useGameContext();
 
   const [showRules, setShowRules] = useState(false);
@@ -104,14 +108,18 @@ const GameBoard = () => {
         {message}
       </div>
 
+      {mode === 'daily' && <DailyPanel />}
+
       <div className={styles.buttons}>
-        <button
-          type="button"
-          className={`${styles.btn} ${styles.resetBtn}`}
-          onClick={resetGame}
-        >
-          Nouvelle partie
-        </button>
+        {mode !== 'daily' && (
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.resetBtn}`}
+            onClick={resetGame}
+          >
+            Nouvelle partie
+          </button>
+        )}
         {mode === 'solo' && (
           <button
             type="button"
@@ -137,14 +145,19 @@ const GameBoard = () => {
         </div>
       )}
 
+      {mode !== 'daily' && (
       <GameOverAnimation
         winner={winner}
         isDraw={isDraw}
         isVisible={gameOver}
         mode={mode}
+        series={series}
+        bestChain={bestChain}
         onRematch={resetGame}
         onHome={goHome}
+        onShare={shareResult}
       />
+      )}
 
       {showRules && <RulesPanel onClose={() => setShowRules(false)} />}
     </div>

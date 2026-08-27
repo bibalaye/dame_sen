@@ -45,6 +45,18 @@ import {
   type TimeControl,
 } from '@/lib/clock';
 import { loadMutePreference, play, setMuted as persistMuted, vibrate } from '@/lib/sound';
+import { shareCard } from '@/lib/shareCard';
+import {
+  MAX_ATTEMPTS,
+  applyResult,
+  dailyNumber,
+  dailyPuzzle,
+  formatShare,
+  loadProgress,
+  puzzleState,
+  saveProgress,
+  type DailyPuzzle,
+} from '@/lib/daily';
 import { useSocketContext } from './SocketContext';
 
 const AI_PLAYER: Player = 'black';
@@ -57,7 +69,16 @@ export type Screen = 'home' | 'game';
  * Les trois façons de jouer. `pass` est le mode le plus proche de la réalité du
  * jeu : deux personnes autour d'un seul appareil.
  */
-export type GameMode = 'solo' | 'pass' | 'online';
+export type GameMode = 'solo' | 'pass' | 'online' | 'daily';
+
+/** Suivi de la partie quotidienne : essais consommés et résultat. */
+export interface DailyState {
+  readonly puzzle: DailyPuzzle;
+  readonly attempts: readonly number[];
+  readonly solved: boolean;
+  readonly finished: boolean;
+  readonly streak: number;
+}
 
 export interface StartOptions {
   readonly mode: GameMode;
@@ -101,7 +122,15 @@ interface GameContextType {
   playerType: Player | null;
   opponent: string | null;
   isWaitingForOpponent: boolean;
+  bestChain: number;
+  series: { white: number; black: number };
+  shareResult: () => void;
+  /** Code de salle reçu par lien d'invitation, à proposer au joueur. */
+  invitedRoom: string | null;
+  daily: DailyState | null;
   handleCellClick: (row: number, col: number) => void;
+  retryDaily: () => void;
+  shareDaily: () => string;
   startGame: (options: StartOptions) => void;
   goHome: () => void;
   resetGame: () => void;
@@ -125,6 +154,22 @@ const winnerOf = (status: Status): Player | null =>
   status.kind === 'win' ? status.winner : null;
 
 const sideName = (player: Player) => (player === 'white' ? 'Blanc' : 'Noir');
+
+/** Le texte du défi du jour : il rappelle l'objectif, jamais la solution. */
+const describeDaily = (state: GameState, daily: DailyState): string => {
+  if (daily.finished) {
+    return daily.solved
+      ? `Trouvé en ${daily.attempts.length} essai${daily.attempts.length > 1 ? 's' : ''} !`
+      : `Raté — la meilleure rafle en prenait ${daily.puzzle.target}.`;
+  }
+  if (state.chainFrom) return 'Continuez, la rafle n’est pas finie !';
+  if (state.currentPlayer !== 'white') {
+    const last = daily.attempts[daily.attempts.length - 1] ?? 0;
+    const left = MAX_ATTEMPTS - daily.attempts.length;
+    return `${last} prise${last > 1 ? 's' : ''} sur ${daily.puzzle.target}. Encore ${left} essai${left > 1 ? 's' : ''}.`;
+  }
+  return `Prenez ${daily.puzzle.target} pièces d’affilée.`;
+};
 
 /** Le texte affiché sous le plateau, déduit du seul état du jeu. */
 const describe = (
@@ -202,6 +247,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [clock, setClock] = useState<ClockState>(() => createClock('none', 0));
   const [timeoutLoser, setTimeoutLoser] = useState<Player | null>(null);
   const [muted, setMutedState] = useState(false);
+  const [daily, setDaily] = useState<DailyState | null>(null);
+  /** Plus longue rafle réussie dans la partie en cours, pour la carte finale. */
+  const [bestChain, setBestChain] = useState(0);
+  /** Score cumulé des revanches, remis à zéro en quittant la table. */
+  const [series, setSeries] = useState({ white: 0, black: 0 });
 
   const gameRef = useRef(game);
   gameRef.current = game;
@@ -212,6 +262,25 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     setMutedState(loadMutePreference());
+  }, []);
+
+  /**
+   * Un lien d'invitation amène directement dans la salle : on bascule en mode
+   * en ligne et on garde le code pour le formulaire, au lieu de demander au
+   * joueur de recopier six caractères à la main.
+   */
+  const [invitedRoom, setInvitedRoom] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const code = new URLSearchParams(window.location.search).get('partie');
+    if (!code) return;
+
+    setInvitedRoom(code.toUpperCase());
+    socketSetMultiplayerMode(true);
+    setMode('online');
+    setScreen('game');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const validMoves = useMemo(
@@ -229,7 +298,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const winner = timeoutLoser ? opponentOf(timeoutLoser) : winnerOf(game.status);
 
   const message =
-    notice ?? describe(game, mode, playerType, isThinking, timeoutLoser);
+    notice ??
+    (mode === 'daily' && daily
+      ? describeDaily(game, daily)
+      : describe(game, mode, playerType, isThinking, timeoutLoser));
 
   /**
    * En mode « autour du plateau », chacun doit voir ses pièces devant soi : le
@@ -245,7 +317,29 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const beginGame = useCallback((options: StartOptions) => {
     const nextVariant = options.variant ?? 'classic';
-    const fresh = createGame(nextVariant);
+
+    // Le défi du jour ne part pas d'une position de départ mais du puzzle du
+    // jour, identique pour tous les joueurs.
+    let fresh: GameState;
+    if (options.mode === 'daily') {
+      const progress = loadProgress();
+      const puzzle = dailyPuzzle(dailyNumber());
+      fresh = puzzleState(puzzle.board);
+      setDaily((current) =>
+        current && current.puzzle.number === puzzle.number
+          ? current
+          : {
+              puzzle,
+              attempts: [],
+              solved: false,
+              finished: false,
+              streak: progress.streak,
+            },
+      );
+    } else {
+      fresh = createGame(nextVariant);
+      setDaily(null);
+    }
 
     setMode(options.mode);
     setVariant(nextVariant);
@@ -260,6 +354,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setHintsLeft(MAX_HINTS);
     setNotice(null);
     setTimeoutLoser(null);
+    setBestChain(0);
     reportedWinner.current = null;
 
     setClock(createClock(options.timeControl ?? 'none', Date.now()));
@@ -279,6 +374,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [beginGame, clock.control, difficulty, mode, variant]);
 
   const goHome = useCallback(() => {
+    setSeries({ white: 0, black: 0 });
     socketSetMultiplayerMode(false);
     setScreen('home');
     setIsWaitingForOpponent(false);
@@ -322,6 +418,37 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       play('lose');
     }
   }, [gameOver, winner, mode, playerType, game.status.kind]);
+
+  useEffect(() => {
+    if (game.chainLength > bestChain) setBestChain(game.chainLength);
+  }, [game.chainLength, bestChain]);
+
+  // Le score de la série ne bouge qu'une fois par partie.
+  const countedGame = useRef(0);
+  useEffect(() => {
+    if (!gameOver || !winner || mode === 'daily') return;
+    if (countedGame.current === gameId) return;
+    countedGame.current = gameId;
+    setSeries((current) => ({ ...current, [winner]: current[winner] + 1 }));
+  }, [gameOver, winner, gameId, mode]);
+
+  const shareResult = useCallback(() => {
+    const names =
+      mode === 'solo'
+        ? { white: 'Vous', black: 'L’adversaire' }
+        : { white: 'Blancs', black: 'Noirs' };
+
+    void shareCard({
+      board: game.board,
+      winner,
+      isDraw: game.status.kind === 'draw',
+      whiteName: names.white,
+      blackName: names.black,
+      whitePieces,
+      blackPieces,
+      bestChain,
+    });
+  }, [bestChain, blackPieces, game.board, game.status.kind, mode, whitePieces, winner]);
 
   // --- Pendule ------------------------------------------------------------
 
@@ -409,6 +536,56 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [game, mode, gameOver, difficulty, screen]);
 
+  // --- Défi du jour -------------------------------------------------------
+
+  /**
+   * Un essai s'achève dès que le trait quitte les blancs : en défi il n'y a pas
+   * d'adversaire, seule compte la longueur de la rafle qu'on vient de jouer.
+   */
+  useEffect(() => {
+    if (mode !== 'daily' || !daily || daily.finished) return;
+    if (!game.lastMove || game.currentPlayer === 'white') return;
+
+    const taken = game.chainLength;
+    const attempts = [...daily.attempts, taken];
+    const solved = taken >= daily.puzzle.target;
+    const finished = solved || attempts.length >= MAX_ATTEMPTS;
+
+    let streak = daily.streak;
+    if (finished) {
+      const progress = applyResult(loadProgress(), daily.puzzle.number, solved);
+      saveProgress(progress);
+      streak = progress.streak;
+      play(solved ? 'win' : 'lose');
+    }
+
+    setDaily({ ...daily, attempts, solved, finished, streak });
+  }, [game, mode, daily]);
+
+  const retryDaily = useCallback(() => {
+    if (!daily || daily.finished) return;
+    const fresh = puzzleState(daily.puzzle.board);
+    gameRef.current = fresh;
+    setGame(fresh);
+    setGameId((id) => id + 1);
+    setSelectedCell(null);
+    setHint(null);
+    setNotice(null);
+  }, [daily]);
+
+  const shareDaily = useCallback(() => {
+    if (!daily) return '';
+    return formatShare(
+      {
+        number: daily.puzzle.number,
+        attempts: daily.attempts,
+        target: daily.puzzle.target,
+        solved: daily.solved,
+      },
+      daily.streak,
+    );
+  }, [daily]);
+
   // --- Multijoueur --------------------------------------------------------
 
   useEffect(() => {
@@ -466,7 +643,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const canPlay = useCallback(
     (player: Player) => {
       if (gameOver) return false;
-      if (mode === 'solo') return player !== AI_PLAYER;
+      if (mode === 'solo' || mode === 'daily') return player !== AI_PLAYER;
       if (mode === 'online') return player === playerType;
       return true;
     },
@@ -577,7 +754,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       playerType,
       opponent,
       isWaitingForOpponent,
+      bestChain,
+      series,
+      shareResult,
+      invitedRoom,
+      daily,
       handleCellClick,
+      retryDaily,
+      shareDaily,
       startGame,
       goHome,
       resetGame,
@@ -587,9 +771,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       joinRoom,
     }),
     [
+      bestChain,
       blackPieces,
       clock,
       createRoom,
+      daily,
       difficulty,
       game,
       gameId,
@@ -599,6 +785,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       hint,
       hintsLeft,
       isFlipped,
+      invitedRoom,
       isMultiplayer,
       isThinking,
       isWaitingForOpponent,
@@ -612,9 +799,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       playerType,
       requestHint,
       resetGame,
+      retryDaily,
       roomId,
       screen,
       selectedCell,
+      series,
+      shareDaily,
+      shareResult,
       startGame,
       toggleMute,
       validMoves,

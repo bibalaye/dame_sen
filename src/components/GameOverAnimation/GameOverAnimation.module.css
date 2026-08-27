@@ -107,3 +107,37 @@
     transition: none;
   }
 }
+
+/* Le score des revanches : ce qui donne envie d'en relancer une. */
+.series {
+  margin: 1.1rem 0 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.feat {
+  margin: 0.3rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--brass);
+}
+
+.link {
+  margin-top: 0.9rem;
+  padding: 6px 12px;
+  border: none;
+  background: none;
+  color: var(--text-soft);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}

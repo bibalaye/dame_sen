@@ -1,0 +1,27 @@
+{
+  "name": "Dames sénégalaises",
+  "short_name": "Dame Sen",
+  "description": "Le jeu de dames à la sénégalaise : plateau 5×5, prises obligatoires et rafles.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ede6d8",
+  "theme_color": "#8a6440",
+  "lang": "fr",
+  "categories": ["games", "board"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -11,8 +11,12 @@ interface GameOverAnimationProps {
   isDraw: boolean;
   isVisible: boolean;
   mode: GameMode;
+  /** Score cumulé des revanches de la série en cours. */
+  series: { white: number; black: number };
+  bestChain: number;
   onRematch: () => void;
   onHome: () => void;
+  onShare: () => void;
 }
 
 const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
@@ -20,8 +24,11 @@ const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
   isDraw,
   isVisible,
   mode,
+  series,
+  bestChain,
   onRematch,
   onHome,
+  onShare,
 }) => {
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
 
@@ -71,14 +78,30 @@ const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
         <h2>{heading}</h2>
         <p>{detail}</p>
 
+        {(series.white > 0 || series.black > 0) && (
+          <p className={styles.series}>
+            Série&nbsp;: <strong>{series.white}</strong> —{' '}
+            <strong>{series.black}</strong>
+          </p>
+        )}
+
+        {bestChain >= 2 && (
+          <p className={styles.feat}>
+            Plus longue rafle&nbsp;: {bestChain} prises
+          </p>
+        )}
+
         <div className={styles.actions}>
           <button type="button" className={styles.rematch} onClick={onRematch}>
             Revanche
           </button>
-          <button type="button" className={styles.secondary} onClick={onHome}>
-            Accueil
+          <button type="button" className={styles.secondary} onClick={onShare}>
+            Partager
           </button>
         </div>
+        <button type="button" className={styles.link} onClick={onHome}>
+          Retour à l’accueil
+        </button>
       </div>
     </div>
   );

@@ -23,6 +23,11 @@ const MODES: ReadonlyArray<{
   detail: string;
 }> = [
   {
+    id: 'daily',
+    title: 'Défi du jour',
+    detail: 'Une position, la même pour tous, trois essais',
+  },
+  {
     id: 'solo',
     title: 'Jouer seul',
     detail: 'Quatre adversaires, du neveu au vieux',
@@ -103,6 +108,7 @@ const HomeScreen: React.FC = () => {
           </fieldset>
         )}
 
+        {mode !== 'daily' && (
         <fieldset className={styles.group}>
           <legend className={styles.legend}>Rythme</legend>
           <div className={styles.chips}>
@@ -122,9 +128,14 @@ const HomeScreen: React.FC = () => {
             ))}
           </div>
         </fieldset>
+        )}
 
         <button type="button" className={styles.play} onClick={handleStart}>
-          {mode === 'online' ? 'Créer ou rejoindre' : 'Commencer la partie'}
+          {mode === 'online'
+            ? 'Créer ou rejoindre'
+            : mode === 'daily'
+              ? 'Relever le défi'
+              : 'Commencer la partie'}
         </button>
       </div>
     </div>

@@ -145,3 +145,9 @@
     padding: 0.4rem 0.8rem;
   }
 }
+/* Le lien d'invitation remplace la dictée du code à six caractères. */
+.hint {
+  font-size: 0.82rem;
+  color: var(--text-soft);
+  line-height: 1.4;
+}

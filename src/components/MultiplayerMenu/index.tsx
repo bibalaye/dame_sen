@@ -13,11 +13,41 @@ const MultiplayerMenu: React.FC = () => {
     opponent,
     isWaitingForOpponent,
     playerType,
+    invitedRoom,
   } = useGameContext();
 
   const [username, setUsername] = useState('');
-  const [roomIdInput, setRoomIdInput] = useState('');
-  const [view, setView] = useState<'main' | 'create' | 'join'>('main');
+  const [roomIdInput, setRoomIdInput] = useState(invitedRoom ?? '');
+  const [view, setView] = useState<'main' | 'create' | 'join'>(
+    invitedRoom ? 'join' : 'main',
+  );
+  const [copied, setCopied] = useState(false);
+
+  /** Le lien complet à envoyer : le destinataire arrive dans la salle. */
+  const inviteLink = () =>
+    typeof window === 'undefined'
+      ? ''
+      : `${window.location.origin}${window.location.pathname}?partie=${roomId}`;
+
+  const handleInvite = async () => {
+    const url = inviteLink();
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: 'Dames sénégalaises',
+          text: 'Une partie ?',
+          url,
+        });
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch {
+      // Partage refusé : le code reste affiché, dictable à l'ancienne.
+      setCopied(false);
+    }
+  };
 
   const handleCreateRoom = (event: React.FormEvent) => {
     event.preventDefault();
@@ -39,7 +69,12 @@ const MultiplayerMenu: React.FC = () => {
           Code de la salle :{' '}
           <span className={styles.roomCode}>{roomId}</span>
         </p>
-        <p>Partagez ce code avec votre adversaire pour qu&apos;il vous rejoigne.</p>
+        <button type="button" className={styles.btn} onClick={handleInvite}>
+          {copied ? 'Lien copié !' : 'Inviter par lien'}
+        </button>
+        <p className={styles.hint}>
+          Le lien ouvre la partie directement — plus besoin de dicter le code.
+        </p>
         {isWaitingForOpponent ? (
           <p className={styles.waiting}>En attente d&apos;un adversaire…</p>
         ) : (
