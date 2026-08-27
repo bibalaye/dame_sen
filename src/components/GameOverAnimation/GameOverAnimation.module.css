@@ -1,90 +1,109 @@
 .gameOverContainer {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
   pointer-events: none;
+  padding: 20px;
+}
+
+.victoryMessage,
+.gameOverMessage {
+  border-radius: 16px;
+  padding: 2rem 2.2rem;
+  text-align: center;
+  animation: rise 0.32s cubic-bezier(0.2, 0.85, 0.25, 1);
+  pointer-events: auto;
+  max-width: 380px;
+  width: 100%;
 }
 
 .victoryMessage {
-  background-color: rgba(255, 255, 255, 0.9);
-  border-radius: 10px;
-  padding: 2rem;
-  text-align: center;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-  animation: fadeIn 0.5s ease-in-out;
-  pointer-events: auto;
-}
-
-.victoryMessage h2 {
-  font-size: 2.5rem;
-  color: #4CAF50;
-  margin-bottom: 1rem;
-}
-
-.victoryMessage p {
-  font-size: 1.5rem;
-  color: #333;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lift), 0 0 0 2px var(--brass);
 }
 
 .gameOverMessage {
-  background-color: rgba(0, 0, 0, 0.8);
-  border-radius: 10px;
-  padding: 2rem;
-  text-align: center;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  animation: fadeIn 0.5s ease-in-out;
-  pointer-events: auto;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lift), 0 0 0 2px var(--line);
+}
+
+.victoryMessage h2,
+.gameOverMessage h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.9rem;
+  line-height: 1.1;
+}
+
+.victoryMessage h2 {
+  color: var(--green);
 }
 
 .gameOverMessage h2 {
-  font-size: 2.5rem;
-  color: #ff5252;
-  margin-bottom: 1rem;
+  color: var(--text-soft);
 }
 
+.victoryMessage p,
 .gameOverMessage p {
-  font-size: 1.5rem;
-  color: #fff;
-  margin-bottom: 1.5rem;
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 1.6rem;
+}
+
+.rematch,
+.secondary {
+  flex: 1;
+  padding: 13px 20px;
+  border-radius: 50px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease;
 }
 
 .rematch {
-  margin-top: 1.6rem;
-  padding: 13px 34px;
   border: none;
-  border-radius: 50px;
-  background: linear-gradient(45deg, #00853f, #00a257);
+  background: linear-gradient(135deg, var(--green), var(--green-deep));
   color: #fff;
-  font-size: 1.05rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.rematch:hover {
+.secondary {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-soft);
+}
+
+.rematch:hover,
+.secondary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(0, 133, 63, 0.4);
 }
 
-.rematch:focus-visible {
-  outline: 3px solid #fdef42;
+.rematch:focus-visible,
+.secondary:focus-visible {
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .victoryMessage,
-  .gameOverMessage {
+  .gameOverMessage,
+  .rematch,
+  .secondary {
     animation: none;
+    transition: none;
   }
 }

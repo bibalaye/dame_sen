@@ -1,302 +1,178 @@
 .container {
-  background-color: rgba(255, 255, 255, 0.9);
-  padding: 30px;
-  border-radius: 15px;
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
-  max-width: 800px;
   width: 100%;
+  max-width: 520px;
   margin: 0 auto;
-  position: relative;
-  overflow: hidden;
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 30px;
-}
-
-.header h1 {
-  color: #00853f;
-  font-size: 2.5rem;
-  margin-bottom: 10px;
-  text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.2);
-  position: relative;
-  display: inline-block;
-}
-
-.header h1::before, .header h1::after {
-  content: "♦";
-  color: #e31b23;
-  font-size: 1.5rem;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
-.header h1::before {
-  left: -30px;
-}
-
-.header h1::after {
-  right: -30px;
-}
-
-.subtitle {
-  color: #e31b23;
-  font-style: italic;
-  margin-bottom: 20px;
-}
-
-.gameContainer {
+  padding: 16px 16px 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 20px;
+  gap: 16px;
 }
 
-.boardWrapper {
-  margin-bottom: 20px;
+.topBar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-align: center;
+  color: var(--text);
+}
+
+.iconBtn {
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 50px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.18s ease, color 0.18s ease;
+}
+
+.iconBtn:hover {
+  border-color: var(--green);
+  color: var(--text);
+}
+
+.iconBtn:focus-visible,
+.btn:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Le plateau et ce qui se joue par-dessus : le bandeau de rafle s'y superpose. */
+.stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
 }
 
 .infoPanel {
   display: flex;
-  justify-content: space-between;
+  gap: 10px;
   width: 100%;
-  max-width: 400px;
-  margin: 25px 0;
+  max-width: 420px;
 }
 
 .playerInfo {
-  text-align: center;
-  padding: 15px;
-  border-radius: 10px;
-  width: 48%;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
-  position: relative;
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-}
-
-.playerInfo::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-size: cover;
-  background-position: center;
-  opacity: 0.1;
-  border-radius: 10px;
-  z-index: -1;
-}
-
-.playerName {
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  opacity: 0.75;
-}
-
-.pieceCount {
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
+  gap: 4px;
+  padding: 12px 10px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
 }
 
 .whitePlayer {
-  background-color: #f5f5f5;
-  border: 2px solid #ddd;
-  color: #333;
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--line);
 }
 
 .blackPlayer {
-  background-color: #333;
-  color: white;
-  border: 2px solid #222;
+  background: var(--piece-dark);
+  color: var(--piece-light);
+  border-color: var(--piece-dark-edge);
 }
 
+/* Le camp au trait est mis en avant plutôt qu'annoncé par une flèche. */
 .activePlayer {
-  transform: translateY(-5px);
-  box-shadow: 0 15px 20px rgba(0, 0, 0, 0.2);
+  border-color: var(--brass);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-soft);
 }
 
-.activePlayer::after {
-  content: "▶";
-  position: absolute;
-  left: -20px;
-  color: #e31b23;
-  font-size: 1.5rem;
-  animation: bounce 1s infinite;
+.playerName {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.78;
 }
 
-@keyframes bounce {
-  0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(5px); }
-}
-
-.controls {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-  gap: 15px;
+.pieceCount {
+  font-size: 1.85rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .message {
-  padding: 15px;
-  background-color: rgba(255, 250, 205, 0.8);
-  border-left: 5px solid #fdef42;
-  border-radius: 5px;
-  text-align: center;
-  min-height: 20px;
   width: 100%;
+  max-width: 420px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--surface);
+  border-left: 4px solid var(--brass);
+  color: var(--text);
+  text-align: center;
   font-weight: 500;
-  transition: all 0.3s ease;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-soft);
+}
+
+/* Trois points qui respirent pendant que l'adversaire calcule. */
+.thinking::after {
+  content: "";
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+  animation: dots 1.2s steps(4, end) infinite;
 }
 
 .buttons {
-  display: flex;
-  gap: 15px;
-}
-
-.btn {
-  padding: 12px 25px;
-  border: none;
-  border-radius: 50px;
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-}
-
-.btn:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
-}
-
-.resetBtn {
-  background: linear-gradient(45deg, #00853f, #00a257);
-  color: white;
-}
-
-.helpBtn {
-  background: linear-gradient(45deg, #fdef42, #ffcd00);
-  color: #333;
-}
-
-.footer {
-  margin-top: 30px;
-  text-align: center;
-  color: #333;
-  font-size: 0.9rem;
-}
-
-@media (max-width: 768px) {
-  .container {
-    padding: 15px;
-  }
-  
-  .header h1 {
-    font-size: 2rem;
-  }
-}
-
-@media (max-width: 500px) {
-  .header h1 {
-    font-size: 1.7rem;
-  }
-  
-  .btn {
-    padding: 10px 20px;
-    font-size: 0.9rem;
-  }
-}
-
-/* Le choix de l'adversaire : quatre personnages plutôt que quatre niveaux. */
-.opponents {
-  border: none;
-  margin: 0;
-  padding: 0;
-  width: 100%;
-}
-
-.opponentsLegend {
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #6b5a45;
-  margin-bottom: 8px;
-}
-
-.opponentList {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   justify-content: center;
 }
 
-.opponentBtn {
-  padding: 8px 15px;
-  border: 2px solid #d7ccc8;
+.btn {
+  padding: 11px 20px;
+  border: 1px solid var(--line);
   border-radius: 50px;
-  background: #fdfaf4;
-  color: #5d4037;
-  font-size: 0.88rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.92rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+  transition: transform 0.18s ease, border-color 0.18s ease;
 }
 
-.opponentBtn:hover {
-  border-color: #00853f;
+.btn:hover:not(:disabled) {
   transform: translateY(-2px);
-}
-
-.opponentBtn:focus-visible {
-  outline: 3px solid #00853f;
-  outline-offset: 2px;
-}
-
-.opponentActive {
-  background: #00853f;
-  border-color: #00853f;
-  color: #fff;
-}
-
-.hintBtn {
-  background: linear-gradient(45deg, #e0e0e0, #f5f5f5);
-  color: #3d2b1a;
+  border-color: var(--green);
 }
 
 .btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
 }
 
-.btn:focus-visible {
-  outline: 3px solid #00853f;
-  outline-offset: 3px;
+.resetBtn {
+  background: linear-gradient(135deg, var(--green), var(--green-deep));
+  border-color: transparent;
+  color: #fff;
 }
 
-/* Pendant que l'adversaire calcule : trois points qui respirent. */
-.thinking::after {
-  content: "";
-  display: inline-block;
-  width: 0.5em;
-  animation: dots 1.2s steps(4, end) infinite;
+.multiplayerSection {
+  width: 100%;
 }
 
 @keyframes dots {
@@ -307,7 +183,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .activePlayer::after,
+  .playerInfo,
+  .btn,
+  .iconBtn {
+    transition: none;
+  }
+
   .thinking::after {
     animation: none;
   }

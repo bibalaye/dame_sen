@@ -2,30 +2,18 @@
 
 import React, { useState } from 'react';
 import Board from '../Board';
-import { useGameContext } from '@/context/GameContext';
+import ClockDisplay from '../ClockDisplay';
+import ComboBanner from '../ComboBanner';
 import GameOverAnimation from '../GameOverAnimation';
 import MultiplayerMenu from '../MultiplayerMenu';
 import RulesPanel from '../RulesPanel';
-import type { Difficulty } from '@/lib/ai';
+import { OPPONENTS } from '../HomeScreen';
+import { useGameContext } from '@/context/GameContext';
 import styles from './GameBoard.module.css';
-
-/**
- * Les quatre adversaires. Un niveau qui porte un nom se raconte : « j'ai battu
- * le vieux » veut dire quelque chose, « j'ai battu le niveau 4 » non.
- */
-const OPPONENTS: ReadonlyArray<{
-  id: Difficulty;
-  name: string;
-  tagline: string;
-}> = [
-  { id: 'easy', name: 'Le neveu', tagline: 'Joue vite, réfléchit peu' },
-  { id: 'medium', name: 'La marchande', tagline: 'Ne rate jamais une prise' },
-  { id: 'hard', name: 'Le tonton', tagline: 'Voit venir les rafles' },
-  { id: 'expert', name: 'Le vieux', tagline: 'Sous le manguier depuis 40 ans' },
-];
 
 const GameBoard = () => {
   const {
+    mode,
     currentPlayer,
     whitePieces,
     blackPieces,
@@ -33,13 +21,17 @@ const GameBoard = () => {
     gameOver,
     winner,
     status,
+    chainLength,
     isThinking,
     hintsLeft,
     difficulty,
-    setDifficulty,
+    clock,
+    muted,
+    isFlipped,
     requestHint,
     resetGame,
-    isMultiplayer,
+    goHome,
+    toggleMute,
   } = useGameContext();
 
   const [showRules, setShowRules] = useState(false);
@@ -47,111 +39,111 @@ const GameBoard = () => {
   const opponent = OPPONENTS.find((entry) => entry.id === difficulty);
   const isDraw = status.kind === 'draw';
 
+  const blackName =
+    mode === 'solo' ? (opponent?.name ?? 'Noirs') : 'Noirs';
+  const whiteName = mode === 'solo' ? 'Vous' : 'Blancs';
+
+  // En mode « autour du plateau », le panneau du joueur au trait passe devant.
+  const panels = [
+    { player: 'white' as const, name: whiteName, count: whitePieces },
+    { player: 'black' as const, name: blackName, count: blackPieces },
+  ];
+  const ordered = isFlipped ? [...panels].reverse() : panels;
+
   return (
     <div className={styles.container}>
-      <header className={styles.header}>
-        <h1>Jeu de Dames à la Sénégalaise</h1>
-        <p className={styles.subtitle}>Le jeu traditionnel du Sénégal</p>
+      <header className={styles.topBar}>
+        <button type="button" className={styles.iconBtn} onClick={goHome}>
+          ← Accueil
+        </button>
+        <h1 className={styles.title}>Dames sénégalaises</h1>
+        <button
+          type="button"
+          className={styles.iconBtn}
+          onClick={toggleMute}
+          aria-pressed={muted}
+          aria-label={muted ? 'Activer le son' : 'Couper le son'}
+        >
+          {muted ? 'Son coupé' : 'Son actif'}
+        </button>
       </header>
 
-      <div className={styles.gameContainer}>
-        <div className={styles.boardWrapper}>
-          <Board />
-        </div>
-
-        <div className={styles.infoPanel}>
-          <div
-            className={`${styles.playerInfo} ${styles.whitePlayer} ${
-              currentPlayer === 'white' ? styles.activePlayer : ''
-            }`}
-          >
-            <span className={styles.playerName}>
-              {isMultiplayer ? 'Blancs' : 'Vous'}
-            </span>
-            <span className={styles.pieceCount}>{whitePieces}</span>
-          </div>
-          <div
-            className={`${styles.playerInfo} ${styles.blackPlayer} ${
-              currentPlayer === 'black' ? styles.activePlayer : ''
-            }`}
-          >
-            <span className={styles.playerName}>
-              {isMultiplayer ? 'Noirs' : (opponent?.name ?? 'Noirs')}
-            </span>
-            <span className={styles.pieceCount}>{blackPieces}</span>
-          </div>
-        </div>
-
-        <div className={styles.controls}>
-          <div
-            className={`${styles.message} ${isThinking ? styles.thinking : ''}`}
-            role="status"
-            aria-live="polite"
-          >
-            {message}
-          </div>
-
-          {!isMultiplayer && (
-            <fieldset className={styles.opponents}>
-              <legend className={styles.opponentsLegend}>Votre adversaire</legend>
-              <div className={styles.opponentList}>
-                {OPPONENTS.map((entry) => (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    className={`${styles.opponentBtn} ${
-                      difficulty === entry.id ? styles.opponentActive : ''
-                    }`}
-                    onClick={() => setDifficulty(entry.id)}
-                    aria-pressed={difficulty === entry.id}
-                    title={entry.tagline}
-                  >
-                    {entry.name}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-          )}
-
-          <div className={styles.buttons}>
-            <button
-              className={`${styles.btn} ${styles.resetBtn}`}
-              onClick={resetGame}
-            >
-              Nouvelle partie
-            </button>
-            {!isMultiplayer && (
-              <button
-                className={`${styles.btn} ${styles.hintBtn}`}
-                onClick={requestHint}
-                disabled={gameOver || hintsLeft === 0 || currentPlayer !== 'white'}
-              >
-                Un conseil ? ({hintsLeft})
-              </button>
-            )}
-            <button
-              className={`${styles.btn} ${styles.helpBtn}`}
-              onClick={() => setShowRules(true)}
-            >
-              Règles du jeu
-            </button>
-          </div>
-        </div>
+      <div className={styles.stage}>
+        <Board />
+        <ComboBanner chainLength={chainLength} />
       </div>
 
-      <div className={styles.multiplayerSection}>
-        <MultiplayerMenu />
+      <div className={styles.infoPanel}>
+        {ordered.map((panel) => (
+          <div
+            key={panel.player}
+            className={[
+              styles.playerInfo,
+              panel.player === 'white' ? styles.whitePlayer : styles.blackPlayer,
+              currentPlayer === panel.player ? styles.activePlayer : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            <span className={styles.playerName}>{panel.name}</span>
+            <span className={styles.pieceCount}>{panel.count}</span>
+            <ClockDisplay
+              clock={clock}
+              player={panel.player}
+              isRunning={clock.running === panel.player}
+            />
+          </div>
+        ))}
       </div>
 
-      <footer className={styles.footer}>
-        <p>© 2025 - Jeu de Dames à la Sénégalaise</p>
-      </footer>
+      <div
+        className={`${styles.message} ${isThinking ? styles.thinking : ''}`}
+        role="status"
+        aria-live="polite"
+      >
+        {message}
+      </div>
+
+      <div className={styles.buttons}>
+        <button
+          type="button"
+          className={`${styles.btn} ${styles.resetBtn}`}
+          onClick={resetGame}
+        >
+          Nouvelle partie
+        </button>
+        {mode === 'solo' && (
+          <button
+            type="button"
+            className={styles.btn}
+            onClick={requestHint}
+            disabled={gameOver || hintsLeft === 0 || currentPlayer !== 'white'}
+          >
+            Un conseil ? ({hintsLeft})
+          </button>
+        )}
+        <button
+          type="button"
+          className={styles.btn}
+          onClick={() => setShowRules(true)}
+        >
+          Règles
+        </button>
+      </div>
+
+      {mode === 'online' && (
+        <div className={styles.multiplayerSection}>
+          <MultiplayerMenu />
+        </div>
+      )}
 
       <GameOverAnimation
         winner={winner}
         isDraw={isDraw}
         isVisible={gameOver}
+        mode={mode}
         onRematch={resetGame}
+        onHome={goHome}
       />
 
       {showRules && <RulesPanel onClose={() => setShowRules(false)} />}

@@ -1,0 +1,43 @@
+.clock {
+  display: inline-block;
+  min-width: 4.2ch;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--surface-sunk);
+  color: var(--text-soft);
+  font-size: 0.98rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* La pendule active se distingue : c'est le temps de celui qui doit jouer. */
+.running {
+  background: var(--brass);
+  color: #201404;
+}
+
+/* Sous dix secondes, le compteur passe au dixième et bat la seconde. */
+.critical.running {
+  background: var(--red);
+  color: #fff;
+  animation: tick 1s steps(2, end) infinite;
+}
+
+.flagged {
+  background: var(--red);
+  color: #fff;
+  opacity: 0.75;
+}
+
+@keyframes tick {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.09); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .critical.running {
+    animation: none;
+  }
+}

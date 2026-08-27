@@ -1,38 +1,176 @@
 .boardWrapper {
   position: relative;
-  padding: 20px;
-  background: linear-gradient(45deg, #5d4037, #8B4513);
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-  margin-bottom: 20px;
+  padding: 18px;
+  border-radius: 12px;
+  /* Une planche de bois, pas un dégradé : le grain vient de bandes fines
+     superposées à la couleur de fond. */
+  background:
+    repeating-linear-gradient(
+      92deg,
+      rgba(255, 255, 255, 0.035) 0 2px,
+      rgba(0, 0, 0, 0.045) 2px 5px,
+      transparent 5px 13px
+    ),
+    linear-gradient(148deg, var(--wood-light), var(--wood-dark));
+  box-shadow:
+    0 2px 0 rgba(255, 255, 255, 0.12) inset,
+    0 18px 38px -14px rgba(28, 16, 6, 0.65);
+}
+
+/* Le liseré tissé du cadre, à la place des cercles flous d'arrière-plan. */
+.boardWrapper::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 6px;
+  padding: 3px;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--braid-a) 0 7px,
+    var(--braid-b) 7px 14px
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.75;
+  pointer-events: none;
 }
 
 .board {
   display: grid;
-  gap: 3px;
-  background-color: #5d4037;
-  padding: 10px;
-  border-radius: 5px;
-  border: 5px solid #5d4037;
+  /* Aucun écart entre les cases : la couche de pièces se positionne en
+     pourcentage, elle doit tomber exactement sur la grille. */
+  gap: 0;
   position: relative;
-  z-index: 1;
+  border-radius: 4px;
+  overflow: hidden;
+  transition: transform 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+  aspect-ratio: 1;
+  width: min(74vw, 360px);
 }
 
-.board::before {
+/* Mode « autour du plateau » : la planche pivote vers le joueur qui prend la
+   main, comme on la ferait tourner sur une table. */
+.flipped {
+  transform: rotate(180deg);
+}
+
+.pieceLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.piece {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Le déplacement d'une case à l'autre : c'est cette transition qui donne son
+     poids au geste. Sans elle, la pièce se téléporte. */
+  transition:
+    left 0.19s cubic-bezier(0.22, 0.86, 0.28, 1),
+    top 0.19s cubic-bezier(0.22, 0.86, 0.28, 1),
+    opacity 0.28s ease,
+    transform 0.28s ease;
+}
+
+.piece::before {
+  content: "";
+  width: 74%;
+  height: 74%;
+  border-radius: 50%;
+  box-shadow:
+    0 3px 5px rgba(20, 12, 4, 0.45),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.28),
+    inset 0 2px 3px rgba(255, 255, 255, 0.35);
+}
+
+.white::before {
+  background:
+    radial-gradient(circle at 34% 28%, #fffdf7 0%, var(--piece-light) 55%, var(--piece-light-edge) 100%);
+}
+
+.black::before {
+  background:
+    radial-gradient(circle at 34% 28%, #55504a 0%, var(--piece-dark) 52%, var(--piece-dark-edge) 100%);
+}
+
+/* Une dame est une seconde pièce posée sur la première, cerclée de laiton —
+   comme sur le plateau en bois, plutôt qu'un symbole emprunté aux échecs. */
+.king::after {
   content: "";
   position: absolute;
-  top: -15px;
-  left: -15px;
-  right: -15px;
-  bottom: -15px;
-  background: repeating-linear-gradient(
-    45deg,
-    #fdef42,
-    #fdef42 10px,
-    #00853f 10px,
-    #00853f 20px
-  );
-  border-radius: 10px;
-  z-index: -1;
-  opacity: 0.3;
+  width: 52%;
+  height: 52%;
+  border-radius: 50%;
+  border: 2px solid var(--brass);
+  box-shadow: 0 2px 4px rgba(20, 12, 4, 0.5);
+}
+
+.white.king::after {
+  background: radial-gradient(circle at 34% 30%, #fffdf7, var(--piece-light-edge));
+}
+
+.black.king::after {
+  background: radial-gradient(circle at 34% 30%, #4d4842, var(--piece-dark-edge));
+}
+
+/* La pièce prise ne s'efface pas : elle se soulève et pivote hors du plateau. */
+.exiting {
+  opacity: 0;
+  transform: scale(1.45) rotate(28deg) translateY(-16%);
+  transition:
+    opacity 0.34s ease-in,
+    transform 0.34s cubic-bezier(0.35, -0.4, 0.75, 0.4);
+}
+
+.promoting::before {
+  animation: crown 0.7s ease-out;
+}
+
+.urgent::before {
+  box-shadow:
+    0 0 0 3px var(--brass),
+    0 3px 6px rgba(20, 12, 4, 0.5);
+  animation: breathe 1.9s ease-in-out infinite;
+}
+
+.dimmed {
+  opacity: 0.4;
+}
+
+@keyframes crown {
+  0% { box-shadow: 0 0 0 0 rgba(201, 146, 46, 0.9); }
+  60% { box-shadow: 0 0 0 14px rgba(201, 146, 46, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(201, 146, 46, 0); }
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07); }
+}
+
+@media (min-width: 720px) {
+  .board {
+    width: 380px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board,
+  .piece,
+  .exiting {
+    transition: none;
+  }
+
+  .promoting::before,
+  .urgent::before {
+    animation: none;
+  }
 }

@@ -1,14 +1,129 @@
 @import "tailwindcss";
 
+/*
+ * Les couleurs viennent des matériaux du jeu — bois de la planche, cauri,
+ * graine, laiton, indigo — et non du drapeau appliqué en aplats. Le vert et le
+ * jaune restent présents, mais comme accents, là où ils servent la lecture.
+ */
 :root {
-  --primary-color: #00853f; /* Green from Senegalese flag */
-  --secondary-color: #fdef42; /* Yellow from Senegalese flag */
-  --accent-color: #e31b23; /* Red from Senegalese flag */
-  --dark-wood: #5d4037;
-  --light-wood: #d7ccc8;
-  --background: #f9f5eb;
-  --text-color: #333;
-  --foreground: #171717;
+  /* Surfaces */
+  --background: #ede6d8;
+  --surface: #fbf7ef;
+  --surface-sunk: #e4dbc9;
+  --text: #33261a;
+  --text-soft: #6d5c48;
+  --line: #d8cbb4;
+
+  /* Matériaux du plateau */
+  --wood-light: #8a6440;
+  --wood-dark: #5a3d24;
+  --square-light: #cdb48d;
+  --square-dark: #bfa176;
+  --square-last: #d9c07f;
+  --square-selected: #a8c9a4;
+  --square-capture: #d8a48f;
+
+  /* Pièces */
+  --piece-light: #f3ead7;
+  --piece-light-edge: #c9b490;
+  --piece-dark: #2c2621;
+  --piece-dark-edge: #100d0a;
+
+  /* Accents */
+  --brass: #c9922e;
+  --green: #00853f;
+  --green-deep: #046b36;
+  --yellow: #fdef42;
+  --red: #c2452c;
+  --indigo: #234a7d;
+
+  --braid-a: #c9922e;
+  --braid-b: #2f6b52;
+
+  --dot-move: rgba(4, 107, 54, 0.62);
+  --dot-capture: rgba(194, 69, 44, 0.85);
+  --dot-hint: rgba(35, 74, 125, 0.7);
+  --focus: #046b36;
+
+  --shadow-soft: 0 10px 30px -14px rgba(51, 38, 26, 0.5);
+  --shadow-lift: 0 20px 44px -18px rgba(51, 38, 26, 0.6);
+
+  --foreground: var(--text);
+}
+
+/* La partie du soir : la lampe éclaire le plateau, le reste passe en indigo. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background: #131a26;
+    --surface: #1b2433;
+    --surface-sunk: #101722;
+    --text: #ece4d5;
+    --text-soft: #a2a9b8;
+    --line: #2b3648;
+
+    --wood-light: #6b4a2c;
+    --wood-dark: #3d2917;
+    --square-light: #a68861;
+    --square-dark: #937450;
+    --square-last: #9d8248;
+    --square-selected: #5f8464;
+    --square-capture: #96543f;
+
+    --piece-light: #e8dcc4;
+    --piece-light-edge: #a8946f;
+    --piece-dark: #1d1916;
+    --piece-dark-edge: #050403;
+
+    --brass: #d9a845;
+    --green: #35a86a;
+    --green-deep: #2f9760;
+    --red: #dd7256;
+    --indigo: #7fa5dd;
+
+    --dot-move: rgba(53, 168, 106, 0.72);
+    --dot-capture: rgba(221, 114, 86, 0.9);
+    --dot-hint: rgba(127, 165, 221, 0.75);
+    --focus: #6fc79a;
+
+    --shadow-soft: 0 10px 30px -14px rgba(0, 0, 0, 0.8);
+    --shadow-lift: 0 20px 44px -18px rgba(0, 0, 0, 0.9);
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: #131a26;
+  --surface: #1b2433;
+  --surface-sunk: #101722;
+  --text: #ece4d5;
+  --text-soft: #a2a9b8;
+  --line: #2b3648;
+
+  --wood-light: #6b4a2c;
+  --wood-dark: #3d2917;
+  --square-light: #a68861;
+  --square-dark: #937450;
+  --square-last: #9d8248;
+  --square-selected: #5f8464;
+  --square-capture: #96543f;
+
+  --piece-light: #e8dcc4;
+  --piece-light-edge: #a8946f;
+  --piece-dark: #1d1916;
+  --piece-dark-edge: #050403;
+
+  --brass: #d9a845;
+  --green: #35a86a;
+  --green-deep: #2f9760;
+  --red: #dd7256;
+  --indigo: #7fa5dd;
+
+  --dot-move: rgba(53, 168, 106, 0.72);
+  --dot-capture: rgba(221, 114, 86, 0.9);
+  --dot-hint: rgba(127, 165, 221, 0.75);
+  --focus: #6fc79a;
+
+  --shadow-soft: 0 10px 30px -14px rgba(0, 0, 0, 0.8);
+  --shadow-lift: 0 20px 44px -18px rgba(0, 0, 0, 0.9);
 }
 
 @theme inline {
@@ -18,32 +133,23 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
+  margin: 0;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: var(--text-color);
+  color: var(--text);
   background-color: var(--background);
+  /* La lumière de fin de journée sur le sol de la cour. */
+  background-image:
+    radial-gradient(120% 80% at 50% -10%, rgba(201, 146, 46, 0.18), transparent 60%),
+    radial-gradient(90% 60% at 50% 110%, rgba(35, 74, 125, 0.12), transparent 60%);
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
-/* Senegalese patterns for background */
-.pattern {
-  position: fixed;
-  width: 150px;
-  height: 150px;
-  background-color: var(--primary-color);
-  opacity: 0.1;
-  z-index: -1;
-  border-radius: 50%;
-}
-
-/* Animation for active player indicator */
-@keyframes bounce {
-  0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(5px); }
+button {
+  font-family: inherit;
 }

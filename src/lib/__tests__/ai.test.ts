@@ -47,6 +47,9 @@ const gameFrom = (rows: readonly string[], currentPlayer: Player): GameState => 
   positionCounts: {},
   status: { kind: 'playing' },
   lastMove: null,
+  lastCapture: null,
+  lastPromotion: false,
+  chainLength: 0,
 });
 
 /** Générateur pseudo-aléatoire déterministe, pour des parties reproductibles. */

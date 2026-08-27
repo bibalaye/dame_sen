@@ -75,6 +75,12 @@ export interface GameState {
   readonly positionCounts: Readonly<Record<string, number>>;
   readonly status: Status;
   readonly lastMove: Move | null;
+  /** Case de la pièce prise au dernier coup, pour l'animation de sortie. */
+  readonly lastCapture: Position | null;
+  /** Vrai si le dernier coup a transformé un pion en dame. */
+  readonly lastPromotion: boolean;
+  /** Prises enchaînées par le tour en cours : 3 pour une rafle triple. */
+  readonly chainLength: number;
 }
 
 /** Coups complets sans prise ni promotion au bout desquels la partie est nulle. */
@@ -402,6 +408,9 @@ export const createGame = (
     positionCounts: { [positionKey(board, firstPlayer)]: 1 },
     status: { kind: 'playing' },
     lastMove: null,
+    lastCapture: null,
+    lastPromotion: false,
+    chainLength: 0,
   };
 };
 
@@ -430,6 +439,14 @@ export const playMove = (state: GameState, move: Move): GameState => {
     !promoted &&
     generateCapturesForPiece(board, legal.toRow, legal.toCol).length > 0;
 
+  const capturedAt =
+    captured && legal.captureRow !== undefined && legal.captureCol !== undefined
+      ? { row: legal.captureRow, col: legal.captureCol }
+      : null;
+
+  // Une prise pendant une rafle allonge le compte ; sinon on repart de zéro.
+  const chainLength = captured ? (state.chainFrom ? state.chainLength : 0) + 1 : 0;
+
   if (canChain) {
     return {
       ...state,
@@ -438,6 +455,9 @@ export const playMove = (state: GameState, move: Move): GameState => {
       halfmoveClock: 0,
       status: { kind: 'playing' },
       lastMove: legal,
+      lastCapture: capturedAt,
+      lastPromotion: promoted,
+      chainLength,
     };
   }
 
@@ -460,6 +480,9 @@ export const playMove = (state: GameState, move: Move): GameState => {
     positionCounts,
     status: evaluateStatus(board, nextPlayer, halfmoveClock, positionCounts),
     lastMove: legal,
+    lastCapture: capturedAt,
+    lastPromotion: promoted,
+    chainLength,
   };
 };
 

@@ -18,6 +18,7 @@ import {
   hasMandatoryCapture,
   legalMovesFrom,
   movablePositions,
+  opponentOf,
   playMove,
   type Board,
   type GameState,
@@ -33,12 +34,41 @@ import {
   thinkingDelay,
   type Difficulty,
 } from '@/lib/ai';
+import {
+  createClock,
+  flaggedPlayer,
+  startClock,
+  stopClock,
+  switchClock,
+  tickClock,
+  type ClockState,
+  type TimeControl,
+} from '@/lib/clock';
+import { loadMutePreference, play, setMuted as persistMuted, vibrate } from '@/lib/sound';
 import { useSocketContext } from './SocketContext';
 
-const HUMAN_PLAYER: Player = 'white';
 const AI_PLAYER: Player = 'black';
+const MAX_HINTS = 3;
+
+/** Où se trouve le joueur dans l'application. */
+export type Screen = 'home' | 'game';
+
+/**
+ * Les trois façons de jouer. `pass` est le mode le plus proche de la réalité du
+ * jeu : deux personnes autour d'un seul appareil.
+ */
+export type GameMode = 'solo' | 'pass' | 'online';
+
+export interface StartOptions {
+  readonly mode: GameMode;
+  readonly difficulty?: Difficulty;
+  readonly timeControl?: TimeControl;
+  readonly variant?: Variant;
+}
 
 interface GameContextType {
+  screen: Screen;
+  mode: GameMode;
   board: Board;
   currentPlayer: Player;
   selectedCell: Position | null;
@@ -50,14 +80,21 @@ interface GameContextType {
   status: Status;
   message: string;
   lastMove: Move | null;
-  /** Cases dont la pièce peut jouer : sert à mettre en avant les prises dues. */
   movableCells: Position[];
   mustCapture: boolean;
+  /** Prises enchaînées par le tour en cours, pour le bandeau de rafle. */
+  chainLength: number;
   isThinking: boolean;
   hint: Move | null;
   hintsLeft: number;
   difficulty: Difficulty;
   variant: Variant;
+  clock: ClockState;
+  /** Vrai quand le plateau doit être vu depuis le camp noir. */
+  isFlipped: boolean;
+  muted: boolean;
+  /** Change à chaque nouvelle partie : sert à réinitialiser les animations. */
+  gameId: number;
   BOARD_SIZE: number;
   isMultiplayer: boolean;
   roomId: string | null;
@@ -65,13 +102,13 @@ interface GameContextType {
   opponent: string | null;
   isWaitingForOpponent: boolean;
   handleCellClick: (row: number, col: number) => void;
+  startGame: (options: StartOptions) => void;
+  goHome: () => void;
   resetGame: () => void;
   requestHint: () => void;
-  setDifficulty: (difficulty: Difficulty) => void;
-  setVariant: (variant: Variant) => void;
+  toggleMute: () => void;
   createRoom: (username: string) => void;
   joinRoom: (roomId: string, username: string) => void;
-  setMultiplayerMode: (isMultiplayer: boolean) => void;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -84,20 +121,24 @@ export const useGameContext = () => {
   return context;
 };
 
-const MAX_HINTS = 3;
-
 const winnerOf = (status: Status): Player | null =>
   status.kind === 'win' ? status.winner : null;
 
-/** Le texte affiché sous le plateau, déduit du seul état du moteur. */
+const sideName = (player: Player) => (player === 'white' ? 'Blanc' : 'Noir');
+
+/** Le texte affiché sous le plateau, déduit du seul état du jeu. */
 const describe = (
   state: GameState,
-  isMultiplayer: boolean,
+  mode: GameMode,
   playerType: Player | null,
   isThinking: boolean,
+  timeoutLoser: Player | null,
 ): string => {
+  if (timeoutLoser) {
+    return `Temps écoulé — le joueur ${sideName(opponentOf(timeoutLoser))} gagne !`;
+  }
   if (state.status.kind === 'win') {
-    const side = state.status.winner === 'white' ? 'Blanc' : 'Noir';
+    const side = sideName(state.status.winner);
     return state.status.reason === 'block'
       ? `Le joueur ${side} gagne par blocage !`
       : `Le joueur ${side} gagne !`;
@@ -110,26 +151,31 @@ const describe = (
 
   if (state.chainFrom) return 'Rafle en cours, continuez avec la même pièce !';
 
-  if (isMultiplayer) {
+  const mustTake = hasMandatoryCapture(state);
+
+  if (mode === 'pass') {
+    return mustTake
+      ? `Aux ${sideName(state.currentPlayer).toLowerCase()}s — prise obligatoire.`
+      : `Au tour des ${sideName(state.currentPlayer).toLowerCase()}s.`;
+  }
+
+  if (mode === 'online') {
     return state.currentPlayer === playerType
-      ? hasMandatoryCapture(state)
+      ? mustTake
         ? 'À vous — une prise est obligatoire.'
         : 'À vous de jouer.'
       : "En attente de l'adversaire…";
   }
 
   if (state.currentPlayer === AI_PLAYER) {
-    return isThinking ? 'Votre adversaire réfléchit…' : 'Au tour des noirs.';
+    return isThinking ? 'Votre adversaire réfléchit' : 'Au tour des noirs.';
   }
-  return hasMandatoryCapture(state)
-    ? 'À vous — une prise est obligatoire.'
-    : 'À vous de jouer.';
+  return mustTake ? 'À vous — une prise est obligatoire.' : 'À vous de jouer.';
 };
 
 export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const {
     socket,
-    isConnected,
     roomId,
     playerType,
     opponent,
@@ -141,25 +187,32 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setMultiplayerMode: socketSetMultiplayerMode,
   } = useSocketContext();
 
-  const [variant, setVariantState] = useState<Variant>('classic');
-  const [difficulty, setDifficultyState] = useState<Difficulty>('medium');
+  const [screen, setScreen] = useState<Screen>('home');
+  const [mode, setMode] = useState<GameMode>('solo');
+  const [variant, setVariant] = useState<Variant>('classic');
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [game, setGame] = useState<GameState>(() => createGame('classic'));
+  const [gameId, setGameId] = useState(1);
   const [selectedCell, setSelectedCell] = useState<Position | null>(null);
-  const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [isWaitingForOpponent, setIsWaitingForOpponent] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [hint, setHint] = useState<Move | null>(null);
   const [hintsLeft, setHintsLeft] = useState(MAX_HINTS);
   const [notice, setNotice] = useState<string | null>(null);
+  const [clock, setClock] = useState<ClockState>(() => createClock('none', 0));
+  const [timeoutLoser, setTimeoutLoser] = useState<Player | null>(null);
+  const [muted, setMutedState] = useState(false);
 
-  /**
-   * L'état courant, lisible depuis les abonnements socket sans les réabonner à
-   * chaque coup — c'était la source des désynchronisations précédentes.
-   */
   const gameRef = useRef(game);
   gameRef.current = game;
 
   const reportedWinner = useRef<Player | null>(null);
+
+  const isMultiplayer = mode === 'online';
+
+  useEffect(() => {
+    setMutedState(loadMutePreference());
+  }, []);
 
   const validMoves = useMemo(
     () =>
@@ -169,34 +222,135 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const movableCells = useMemo(() => movablePositions(game), [game]);
   const mustCapture = useMemo(() => hasMandatoryCapture(game), [game]);
-
   const whitePieces = useMemo(() => countPieces(game.board, 'white'), [game.board]);
   const blackPieces = useMemo(() => countPieces(game.board, 'black'), [game.board]);
 
-  const gameOver = game.status.kind !== 'playing';
-  const winner = winnerOf(game.status);
+  const gameOver = game.status.kind !== 'playing' || timeoutLoser !== null;
+  const winner = timeoutLoser ? opponentOf(timeoutLoser) : winnerOf(game.status);
 
   const message =
-    notice ?? describe(game, isMultiplayer, playerType, isThinking);
-
-  const startGame = useCallback(
-    (nextVariant: Variant = variant) => {
-      setGame(createGame(nextVariant));
-      setSelectedCell(null);
-      setIsThinking(false);
-      setHint(null);
-      setHintsLeft(MAX_HINTS);
-      setNotice(null);
-      reportedWinner.current = null;
-    },
-    [variant],
-  );
+    notice ?? describe(game, mode, playerType, isThinking, timeoutLoser);
 
   /**
-   * Joue un coup localement, et le transmet en multijoueur si c'est le nôtre.
-   * L'émission réseau reste en dehors du setter d'état : React peut rejouer un
-   * setter, jamais un effet de bord.
+   * En mode « autour du plateau », chacun doit voir ses pièces devant soi : le
+   * plateau pivote quand les noirs prennent la main. En ligne, il est orienté
+   * une fois pour toutes selon la couleur du joueur.
    */
+  const isFlipped =
+    mode === 'pass'
+      ? game.currentPlayer === 'black'
+      : mode === 'online' && playerType === 'black';
+
+  // --- Démarrage et arrêt -------------------------------------------------
+
+  const beginGame = useCallback((options: StartOptions) => {
+    const nextVariant = options.variant ?? 'classic';
+    const fresh = createGame(nextVariant);
+
+    setMode(options.mode);
+    setVariant(nextVariant);
+    if (options.difficulty) setDifficulty(options.difficulty);
+
+    setGame(fresh);
+    gameRef.current = fresh;
+    setGameId((id) => id + 1);
+    setSelectedCell(null);
+    setIsThinking(false);
+    setHint(null);
+    setHintsLeft(MAX_HINTS);
+    setNotice(null);
+    setTimeoutLoser(null);
+    reportedWinner.current = null;
+
+    setClock(createClock(options.timeControl ?? 'none', Date.now()));
+    setScreen('game');
+  }, []);
+
+  const startGame = useCallback(
+    (options: StartOptions) => {
+      socketSetMultiplayerMode(options.mode === 'online');
+      beginGame(options);
+    },
+    [beginGame, socketSetMultiplayerMode],
+  );
+
+  const resetGame = useCallback(() => {
+    beginGame({ mode, difficulty, timeControl: clock.control, variant });
+  }, [beginGame, clock.control, difficulty, mode, variant]);
+
+  const goHome = useCallback(() => {
+    socketSetMultiplayerMode(false);
+    setScreen('home');
+    setIsWaitingForOpponent(false);
+    setNotice(null);
+  }, [socketSetMultiplayerMode]);
+
+  const toggleMute = useCallback(() => {
+    setMutedState((current) => {
+      persistMuted(!current);
+      return !current;
+    });
+  }, []);
+
+  // --- Sons ---------------------------------------------------------------
+
+  // Un son par coup joué, choisi sur ce que le moteur rapporte de ce coup.
+  useEffect(() => {
+    if (!game.lastMove) return;
+
+    if (game.lastPromotion) {
+      play('promote');
+      vibrate([12, 40, 18]);
+    } else if (game.lastCapture) {
+      play('capture', game.chainLength - 1);
+      vibrate(game.chainLength > 1 ? [10, 30, 14] : 12);
+    } else {
+      play('move');
+    }
+  }, [game.lastMove, game.lastCapture, game.lastPromotion, game.chainLength]);
+
+  useEffect(() => {
+    if (!gameOver) return;
+    if (game.status.kind === 'draw') return;
+
+    const humanSide = mode === 'online' ? playerType : 'white';
+    if (mode === 'pass') {
+      play('win');
+    } else if (winner && winner === humanSide) {
+      play('win');
+    } else {
+      play('lose');
+    }
+  }, [gameOver, winner, mode, playerType, game.status.kind]);
+
+  // --- Pendule ------------------------------------------------------------
+
+  useEffect(() => {
+    if (clock.control === 'none' || !clock.running || gameOver) return;
+
+    const timer = window.setInterval(() => {
+      setClock((current) => tickClock(current, Date.now()));
+    }, 100);
+
+    return () => window.clearInterval(timer);
+  }, [clock.control, clock.running, gameOver]);
+
+  useEffect(() => {
+    const flagged = flaggedPlayer(clock);
+    if (flagged && !timeoutLoser && game.status.kind === 'playing') {
+      setTimeoutLoser(flagged);
+    }
+  }, [clock, timeoutLoser, game.status.kind]);
+
+  // Arrête la pendule dès que la partie est terminée.
+  useEffect(() => {
+    if (gameOver && clock.running) {
+      setClock((current) => stopClock(current, Date.now()));
+    }
+  }, [gameOver, clock.running]);
+
+  // --- Jouer un coup ------------------------------------------------------
+
   const commitMove = useCallback(
     (move: Move, broadcast: boolean) => {
       const current = gameRef.current;
@@ -209,6 +363,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setHint(null);
       setNotice(null);
 
+      // La pendule ne bascule qu'au vrai changement de trait : une rafle laisse
+      // le temps courir chez celui qui enchaîne, comme sur une pendule réelle.
+      if (next.currentPlayer !== current.currentPlayer) {
+        setClock((clockState) =>
+          switchClock(clockState, current.currentPlayer, next.currentPlayer, Date.now()),
+        );
+      }
+
       if (broadcast && isMultiplayer) {
         socketMakeMove(move, next.currentPlayer);
       }
@@ -216,18 +378,20 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     [isMultiplayer, socketMakeMove],
   );
 
-  // --- Tour de l'adversaire artificiel -----------------------------------
-
-  /**
-   * `commitMove` est recréé dès qu'un callback du contexte socket change.
-   * Le garder hors des dépendances évite que le minuteur de réflexion soit
-   * relancé à chaque rendu — auquel cas l'adversaire ne jouerait jamais.
-   */
   const commitMoveRef = useRef(commitMove);
   commitMoveRef.current = commitMove;
 
+  // Le premier coup lance la pendule.
   useEffect(() => {
-    if (isMultiplayer || gameOver) return;
+    if (screen !== 'game' || clock.control === 'none') return;
+    if (clock.running || gameOver || game.lastMove) return;
+    setClock((current) => startClock(current, game.currentPlayer, Date.now()));
+  }, [screen, clock.control, clock.running, gameOver, game.lastMove, game.currentPlayer]);
+
+  // --- Tour de l'adversaire artificiel ------------------------------------
+
+  useEffect(() => {
+    if (mode !== 'solo' || gameOver || screen !== 'game') return;
     if (game.currentPlayer !== AI_PLAYER) return;
 
     setIsThinking(true);
@@ -243,13 +407,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       clearTimeout(timer);
       setIsThinking(false);
     };
-  }, [game, isMultiplayer, gameOver, difficulty]);
+  }, [game, mode, gameOver, difficulty, screen]);
 
   // --- Multijoueur --------------------------------------------------------
-
-  useEffect(() => {
-    if (isMultiplayer && isConnected) setNotice(null);
-  }, [isMultiplayer, isConnected]);
 
   useEffect(() => {
     if (opponent) {
@@ -259,15 +419,17 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [opponent]);
 
   useEffect(() => {
-    if (isMultiplayer && isGameStarted) startGame();
-  }, [isGameStarted, isMultiplayer, startGame]);
+    if (isMultiplayer && isGameStarted) {
+      beginGame({ mode: 'online', timeControl: clock.control, variant });
+    }
+    // `clock.control` et `variant` sont lus au démarrage, sans relancer l'effet.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGameStarted, isMultiplayer, beginGame]);
 
   useEffect(() => {
     if (!socket || !isMultiplayer) return;
 
     const handleOpponentMove = ({ move }: { move: Move }) => {
-      // Le coup passe par le moteur : un coup illégal est signalé et ignoré,
-      // au lieu d'être appliqué tel quel comme auparavant.
       const current = gameRef.current;
       const next = playMove(current, move);
       if (next === current) {
@@ -277,6 +439,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       gameRef.current = next;
       setGame(next);
       setSelectedCell(null);
+
+      if (next.currentPlayer !== current.currentPlayer) {
+        setClock((clockState) =>
+          switchClock(clockState, current.currentPlayer, next.currentPlayer, Date.now()),
+        );
+      }
     };
 
     socket.on('opponent-move', handleOpponentMove);
@@ -285,7 +453,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [socket, isMultiplayer]);
 
-  // Annonce la fin de partie une seule fois, à partir du moteur.
   useEffect(() => {
     if (!isMultiplayer || !winner) return;
     if (reportedWinner.current === winner) return;
@@ -295,13 +462,21 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // --- Interaction --------------------------------------------------------
 
+  /** Le joueur peut-il agir sur le plateau en ce moment ? */
+  const canPlay = useCallback(
+    (player: Player) => {
+      if (gameOver) return false;
+      if (mode === 'solo') return player !== AI_PLAYER;
+      if (mode === 'online') return player === playerType;
+      return true;
+    },
+    [gameOver, mode, playerType],
+  );
+
   const handleCellClick = useCallback(
     (row: number, col: number) => {
-      if (gameOver) return;
-      if (isMultiplayer && game.currentPlayer !== playerType) return;
-      if (!isMultiplayer && game.currentPlayer === AI_PLAYER) return;
+      if (!canPlay(game.currentPlayer)) return;
 
-      // Deuxième clic : la case est-elle une destination valide ?
       if (selectedCell) {
         const target = validMoves.find(
           (move) => move.toRow === row && move.toCol === col,
@@ -322,10 +497,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return;
       }
 
-      // Une pièce sans coup légal ne se sélectionne pas : soit une prise est
-      // obligatoire ailleurs, soit elle est bloquée. On le dit une fois.
       if (legalMovesFrom(game, row, col).length === 0) {
         setSelectedCell(null);
+        play('illegal');
         setNotice(
           game.chainFrom
             ? 'La rafle doit se poursuivre avec la même pièce.'
@@ -339,22 +513,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setNotice(null);
       setSelectedCell({ row, col });
     },
-    [
-      commitMove,
-      game,
-      gameOver,
-      isMultiplayer,
-      mustCapture,
-      playerType,
-      selectedCell,
-      validMoves,
-    ],
+    [canPlay, commitMove, game, mustCapture, selectedCell, validMoves],
   );
 
   const requestHint = useCallback(() => {
-    if (gameOver || hintsLeft <= 0) return;
-    if (isMultiplayer && game.currentPlayer !== playerType) return;
-    if (!isMultiplayer && game.currentPlayer !== HUMAN_PLAYER) return;
+    if (hintsLeft <= 0 || !canPlay(game.currentPlayer)) return;
 
     const suggestion = suggestMove(game);
     if (!suggestion) return;
@@ -362,23 +525,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setHint(suggestion);
     setHintsLeft((left) => left - 1);
     setSelectedCell({ row: suggestion.fromRow, col: suggestion.fromCol });
-  }, [game, gameOver, hintsLeft, isMultiplayer, playerType]);
-
-  const resetGame = useCallback(() => startGame(), [startGame]);
-
-  const setVariant = useCallback((next: Variant) => {
-    setVariantState(next);
-    setGame(createGame(next));
-    setSelectedCell(null);
-    setHint(null);
-    setHintsLeft(MAX_HINTS);
-    setNotice(null);
-    reportedWinner.current = null;
-  }, []);
-
-  const setDifficulty = useCallback((next: Difficulty) => {
-    setDifficultyState(next);
-  }, []);
+  }, [canPlay, game, hintsLeft]);
 
   const createRoom = useCallback(
     (username: string) => {
@@ -397,17 +544,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     [socketJoinRoom],
   );
 
-  const setMultiplayerMode = useCallback(
-    (enabled: boolean) => {
-      setIsMultiplayer(enabled);
-      socketSetMultiplayerMode(enabled);
-      startGame();
-    },
-    [socketSetMultiplayerMode, startGame],
-  );
-
   const value = useMemo<GameContextType>(
     () => ({
+      screen,
+      mode,
       board: game.board,
       currentPlayer: game.currentPlayer,
       selectedCell,
@@ -421,11 +561,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       lastMove: game.lastMove,
       movableCells,
       mustCapture,
+      chainLength: game.chainLength,
       isThinking,
       hint,
       hintsLeft,
       difficulty,
       variant,
+      clock,
+      isFlipped,
+      muted,
+      gameId,
       BOARD_SIZE,
       isMultiplayer,
       roomId,
@@ -433,39 +578,45 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       opponent,
       isWaitingForOpponent,
       handleCellClick,
+      startGame,
+      goHome,
       resetGame,
       requestHint,
-      setDifficulty,
-      setVariant,
+      toggleMute,
       createRoom,
       joinRoom,
-      setMultiplayerMode,
     }),
     [
       blackPieces,
+      clock,
       createRoom,
       difficulty,
       game,
+      gameId,
       gameOver,
+      goHome,
       handleCellClick,
       hint,
       hintsLeft,
+      isFlipped,
       isMultiplayer,
       isThinking,
       isWaitingForOpponent,
       joinRoom,
       message,
+      mode,
       movableCells,
+      muted,
       mustCapture,
       opponent,
       playerType,
       requestHint,
       resetGame,
       roomId,
+      screen,
       selectedCell,
-      setDifficulty,
-      setMultiplayerMode,
-      setVariant,
+      startGame,
+      toggleMute,
       validMoves,
       variant,
       whitePieces,

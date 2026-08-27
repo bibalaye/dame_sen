@@ -54,6 +54,9 @@ const gameFrom = (rows: readonly string[], currentPlayer: Player): GameState => 
   positionCounts: {},
   status: { kind: 'playing' },
   lastMove: null,
+  lastCapture: null,
+  lastPromotion: false,
+  chainLength: 0,
 });
 
 const move = (
@@ -555,5 +558,83 @@ describe('coups illégaux', () => {
     );
     // Prise obligatoire : seul le pion en (1,2) peut jouer.
     assert.deepEqual(movablePositions(state), [{ row: 1, col: 2 }]);
+  });
+});
+
+describe('retour sur le dernier coup', () => {
+  test('une prise est signalée avec la case de la pièce prise', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        '.bw..',
+        '.....',
+        '.....',
+      ],
+      'white',
+    );
+    const next = playMove(state, move(2, 2, 2, 0, [2, 1]));
+    assert.deepEqual(next.lastCapture, { row: 2, col: 1 });
+    assert.equal(next.chainLength, 1);
+    assert.equal(next.lastPromotion, false);
+  });
+
+  test('une rafle triple est comptée comme telle', () => {
+    let state = gameFrom(
+      [
+        '.....',
+        '.....',
+        'wb.b.',
+        '....b',
+        '.....',
+      ],
+      'white',
+    );
+
+    state = playMove(state, move(2, 0, 2, 2, [2, 1]));
+    assert.equal(state.chainLength, 1);
+    assert.equal(state.currentPlayer, 'white', 'la rafle garde le trait');
+
+    state = playMove(state, move(2, 2, 2, 4, [2, 3]));
+    assert.equal(state.chainLength, 2);
+    assert.equal(state.currentPlayer, 'white');
+
+    // La troisième prise atterrit sur la rangée de promotion : la pièce devient
+    // dame, ce qui met fin au tour tout en conservant le compte de la rafle.
+    state = playMove(state, move(2, 4, 4, 4, [3, 4]));
+    assert.equal(state.chainLength, 3);
+    assert.equal(state.lastPromotion, true);
+    assert.equal(state.currentPlayer, 'black');
+  });
+
+  test('un déplacement simple remet le compteur de rafle à zéro', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '..w..',
+        '.....',
+        '.....',
+        '.....',
+      ],
+      'white',
+    );
+    const next = playMove(state, move(1, 2, 2, 2));
+    assert.equal(next.chainLength, 0);
+    assert.equal(next.lastCapture, null);
+  });
+
+  test('une promotion est signalée', () => {
+    const state = gameFrom(
+      [
+        '.....',
+        '.....',
+        '.....',
+        '..w..',
+        '.....',
+      ],
+      'white',
+    );
+    const next = playMove(state, move(3, 2, 4, 2));
+    assert.equal(next.lastPromotion, true);
   });
 });
