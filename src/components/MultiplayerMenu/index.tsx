@@ -96,7 +96,7 @@ const MultiplayerMenu: React.FC = () => {
           Code de la salle :{' '}
           <span className={styles.roomCode}>{roomId}</span>
         </p>
-        <button type="button" className={styles.btn} onClick={handleInvite}>
+        <button type="button" className={`uiButton ${styles.btn}`} onClick={handleInvite}>
           {copied ? 'Lien copié !' : 'Inviter par lien'}
         </button>
         <p className={styles.hint}>
@@ -158,7 +158,7 @@ const MultiplayerMenu: React.FC = () => {
           )}
 
           <div className={styles.buttonGroup}>
-            <button type="submit" className={styles.btn} disabled={!!connectionError}>
+            <button type="submit" className={`uiButton ${styles.btn}`} disabled={!!connectionError}>
               {isConnecting
                 ? 'Connexion…'
                 : isJoining
@@ -182,10 +182,10 @@ const MultiplayerMenu: React.FC = () => {
     <div className={styles.menuContainer}>
       {status}
       <div className={styles.buttonGroup}>
-        <button type="button" className={styles.btn} onClick={() => setView('create')}>
+        <button type="button" className={`uiButton ${styles.btn}`} onClick={() => setView('create')}>
           Créer une partie
         </button>
-        <button type="button" className={styles.btn} onClick={() => setView('join')}>
+        <button type="button" className={`uiButton ${styles.btn}`} onClick={() => setView('join')}>
           Rejoindre une partie
         </button>
       </div>

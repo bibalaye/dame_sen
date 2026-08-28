@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef } from 'react';
+import { play } from '@/lib/sound';
 import styles from './Modal.module.css';
 
 interface ModalProps {
@@ -34,7 +35,10 @@ const Modal: React.FC<ModalProps> = ({
   const panelRef = useRef<HTMLDivElement>(null);
 
   const handleClose = useCallback(() => {
-    if (dismissible) onClose();
+    if (dismissible) {
+      play('click');
+      onClose();
+    }
   }, [dismissible, onClose]);
 
   useEffect(() => {

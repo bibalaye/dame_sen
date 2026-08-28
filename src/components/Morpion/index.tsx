@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import Modal from '../Modal';
 import MultiplayerMenu from '../MultiplayerMenu';
+import PieceSetPicker from '../PieceSetPicker';
 import PlayerBar from '../PlayerBar';
 import Toast from '../Toast';
 import { useGameContext, type GameMode } from '@/context/GameContext';
@@ -55,6 +57,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
     isGameStarted,
     makeMove: sendMove,
     recordGame,
+    pieceSet,
     opponentLeft,
     acknowledgeOpponentLeft,
   } = useGameContext();
@@ -70,6 +73,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
   const [isThinking, setIsThinking] = useState(false);
   /** Résultat refermé à la croix : on veut revoir la grille finale. */
   const [resultHidden, setResultHidden] = useState(false);
+  const [piecesOpen, setPiecesOpen] = useState(false);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -382,7 +386,16 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
                   }`}
                   aria-pressed={selected === index}
                 >
-                  <span className={styles.mark} aria-hidden="true" />
+                  {cell && (
+                    <Image
+                      className={styles.mark}
+                      src={cell === 'X' ? pieceSet.light : pieceSet.dark}
+                      width={64}
+                      height={64}
+                      alt=""
+                      draggable={false}
+                    />
+                  )}
                 </button>
               );
             })}
@@ -420,7 +433,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
               revenir à l’accueil.
             </p>
             <div className={styles.actions}>
-              <button type="button" className={styles.primary} onClick={goHome}>
+              <button type="button" className={`uiButton ${styles.primary}`} onClick={goHome}>
                 Accueil
               </button>
               <button
@@ -459,7 +472,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
 
             <div className={styles.actions}>
               {!online && (
-                <button type="button" className={styles.primary} onClick={reset}>
+                <button type="button" className={`uiButton ${styles.primary}`} onClick={reset}>
                   Revanche
                 </button>
               )}
@@ -470,6 +483,8 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
           </div>
         </Modal>
       )}
+
+      {piecesOpen && <PieceSetPicker onClose={() => setPiecesOpen(false)} />}
 
       {menuOpen && (
         <Modal title="Partie" onClose={() => setMenuOpen(false)}>
@@ -486,6 +501,17 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
                 Nouvelle partie
               </button>
             )}
+            <button
+              type="button"
+              className={styles.menuItem}
+              onClick={() => {
+                setPiecesOpen(true);
+                setMenuOpen(false);
+              }}
+            >
+              Changer de pions
+            </button>
+
             <button type="button" className={styles.menuItem} onClick={toggleMute}>
               {muted ? 'Activer le son' : 'Couper le son'}
             </button>

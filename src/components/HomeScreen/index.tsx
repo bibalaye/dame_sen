@@ -1,12 +1,15 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import Image from 'next/image';
 import StatsPanel from '../StatsPanel';
+import PieceSetPicker from '../PieceSetPicker';
 import { computeStats } from '@/lib/history';
 import { useGameContext, type GameKind, type GameMode } from '@/context/GameContext';
 import { TIME_CONTROLS, type TimeControl } from '@/lib/clock';
 import { MORPION_OPPONENTS, type MorpionVariant } from '@/lib/morpion';
 import type { Difficulty } from '@/lib/ai';
+import { play } from '@/lib/sound';
 import styles from './HomeScreen.module.css';
 
 export const OPPONENTS: ReadonlyArray<{
@@ -101,8 +104,9 @@ const BoardPreview: React.FC<{ kind: GameKind }> = ({ kind }) => {
 };
 
 const HomeScreen: React.FC = () => {
-  const { startGame, history } = useGameContext();
+  const { startGame, history, pieceSet } = useGameContext();
   const [statsOpen, setStatsOpen] = useState(false);
+  const [piecesOpen, setPiecesOpen] = useState(false);
   const stats = useMemo(() => computeStats(history), [history]);
   const [kind, setKind] = useState<GameKind>('dames');
   const [mode, setMode] = useState<GameMode>('solo');
@@ -123,6 +127,7 @@ const HomeScreen: React.FC = () => {
         }));
 
   const handleKind = (next: GameKind) => {
+    play('click');
     setKind(next);
     if (next === 'morpion') {
       if (mode === 'daily') setMode('solo');
@@ -183,6 +188,24 @@ const HomeScreen: React.FC = () => {
               </button>
             ))}
           </div>
+        </section>
+
+        <section className={styles.section}>
+          <h2 className={styles.label}>Vos pions</h2>
+          <button
+            type="button"
+            className={styles.pieces}
+            onClick={() => setPiecesOpen(true)}
+          >
+            <span className={styles.piecesPreview}>
+              <Image src={pieceSet.light} alt="" width={30} height={30} />
+              <Image src={pieceSet.dark} alt="" width={30} height={30} />
+            </span>
+            <span className={styles.piecesName}>{pieceSet.name}</span>
+            <span className={styles.piecesMore} aria-hidden="true">
+              Changer ›
+            </span>
+          </button>
         </section>
 
         <section className={styles.section}>
@@ -281,15 +304,17 @@ const HomeScreen: React.FC = () => {
       </div>
 
       {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
+      {piecesOpen && <PieceSetPicker onClose={() => setPiecesOpen(false)} />}
 
       {/* Le lancement reste sous le pouce, quelle que soit la longueur de l'écran. */}
       <div className={styles.launcher}>
         <button
           type="button"
-          className={styles.play}
-          onClick={() =>
-            startGame({ kind, mode, difficulty, timeControl, morpionVariant })
-          }
+          className={`uiButton ${styles.play}`}
+          onClick={() => {
+            play('select');
+            startGame({ kind, mode, difficulty, timeControl, morpionVariant });
+          }}
         >
           {cta}
           <span className={styles.playIcon} aria-hidden="true">

@@ -44,7 +44,13 @@ import {
   type ClockState,
   type TimeControl,
 } from '@/lib/clock';
-import { loadMutePreference, play, setMuted as persistMuted, vibrate } from '@/lib/sound';
+import {
+  loadMutePreference,
+  play,
+  preloadSounds,
+  setMuted as persistMuted,
+  vibrate,
+} from '@/lib/sound';
 import { shareCard } from '@/lib/shareCard';
 import {
   MAX_ATTEMPTS,
@@ -58,6 +64,14 @@ import {
   type DailyPuzzle,
 } from '@/lib/daily';
 import type { MorpionVariant } from '@/lib/morpion';
+import {
+  DEFAULT_PIECE_SET,
+  findPieceSet,
+  loadPieceSet,
+  savePieceSet,
+  type PieceSet,
+  type PieceSetId,
+} from '@/lib/pieceSets';
 import {
   addEntry,
   clearHistory as clearStoredHistory,
@@ -138,6 +152,9 @@ interface GameContextType {
   /** Vrai quand le plateau doit être vu depuis le camp noir. */
   isFlipped: boolean;
   muted: boolean;
+  /** Jeu de pions choisi par le joueur, commun aux deux plateaux. */
+  pieceSet: PieceSet;
+  setPieceSet: (id: PieceSetId) => void;
   /** Change à chaque nouvelle partie : sert à réinitialiser les animations. */
   gameId: number;
   BOARD_SIZE: number;
@@ -294,6 +311,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [clock, setClock] = useState<ClockState>(() => createClock('none', 0));
   const [timeoutLoser, setTimeoutLoser] = useState<Player | null>(null);
   const [muted, setMutedState] = useState(false);
+  const [pieceSetId, setPieceSetId] = useState<PieceSetId>(DEFAULT_PIECE_SET);
   const [daily, setDaily] = useState<DailyState | null>(null);
   /** Plus longue rafle réussie dans la partie en cours, pour la carte finale. */
   const [bestChain, setBestChain] = useState(0);
@@ -336,6 +354,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     setMutedState(loadMutePreference());
+    setPieceSetId(loadPieceSet());
+    preloadSounds();
+  }, []);
+
+  const pieceSet = useMemo(() => findPieceSet(pieceSetId), [pieceSetId]);
+
+  const setPieceSet = useCallback((id: PieceSetId) => {
+    setPieceSetId(id);
+    savePieceSet(id);
+    play('select');
   }, []);
 
   /**
@@ -909,6 +937,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       clock,
       isFlipped,
       muted,
+      pieceSet,
+      setPieceSet,
       gameId,
       BOARD_SIZE,
       isMultiplayer,
@@ -981,8 +1011,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       acknowledgeOpponentLeft,
       opponent,
       opponentLeft,
+      pieceSet,
       playerType,
       requestHint,
+      setPieceSet,
       resetGame,
       retryDaily,
       roomId,

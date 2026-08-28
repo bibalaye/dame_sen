@@ -37,6 +37,7 @@
 }
 
 .brand {
+  font-family: var(--font-display);
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.28em;
@@ -45,6 +46,7 @@
 }
 
 .title {
+  font-family: var(--font-display);
   margin: 0;
   display: flex;
   flex-direction: column;
@@ -117,6 +119,7 @@
 }
 
 .gameName {
+  font-family: var(--font-display);
   font-size: 1.02rem;
   font-weight: 800;
   letter-spacing: -0.01em;
@@ -308,6 +311,7 @@
 }
 
 .cardName {
+  font-family: var(--font-display);
   font-size: 0.92rem;
   font-weight: 800;
 }
@@ -335,27 +339,11 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 17px 24px;
-  border: none;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #e0a63a, #b87a19);
-  color: #1c1204;
-  font-family: inherit;
+  min-height: 64px;
   font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  box-shadow: 0 12px 28px -12px rgba(224, 166, 58, 0.9);
-  transition: transform 0.16s ease, box-shadow 0.16s ease;
-}
-
-.play:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 34px -14px rgba(224, 166, 58, 1);
-}
-
-.play:active {
-  transform: translateY(0);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  filter: drop-shadow(0 10px 20px rgba(224, 166, 58, 0.35));
 }
 
 .playIcon {
@@ -442,4 +430,55 @@
   color: rgba(242, 232, 214, 0.4);
   font-size: 1.1rem;
   line-height: 1;
+}
+
+/* Choix des pions : l'aperçu se lit avant le nom. */
+.pieces {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid rgba(242, 232, 214, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s ease;
+}
+
+.pieces:hover {
+  border-color: rgba(201, 146, 46, 0.5);
+}
+
+.pieces:focus-visible {
+  outline: 3px solid #f0d9a4;
+  outline-offset: 3px;
+}
+
+.piecesPreview {
+  display: flex;
+  gap: 2px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: linear-gradient(148deg, #b99a72, #a9885e);
+}
+
+.piecesPreview img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 2px rgba(20, 12, 4, 0.5));
+}
+
+.piecesName {
+  flex: 1;
+  text-align: left;
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.piecesMore {
+  font-size: 0.76rem;
+  color: rgba(242, 232, 214, 0.5);
 }

@@ -125,43 +125,14 @@
 
 .mark {
   position: absolute;
-  inset: 22%;
-  display: block;
-}
-
-/* Le rond : un cauri posé sur la case. */
-.round .mark {
-  border-radius: 50%;
-  border: 9px solid var(--piece-light);
-  box-shadow:
-    0 2px 5px rgba(20, 12, 4, 0.4),
-    inset 0 1px 2px rgba(0, 0, 0, 0.25);
-  animation: pop 0.24s cubic-bezier(0.2, 0.9, 0.25, 1);
-}
-
-/* La croix : deux traits gravés. */
-.cross .mark::before,
-.cross .mark::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: -6%;
-  width: 112%;
-  height: 9px;
-  border-radius: 99px;
-  background: var(--piece-dark);
-  box-shadow: 0 2px 4px rgba(20, 12, 4, 0.45);
-}
-
-.cross .mark::before {
-  transform: translateY(-50%) rotate(45deg);
-}
-
-.cross .mark::after {
-  transform: translateY(-50%) rotate(-45deg);
-}
-
-.cross .mark {
+  inset: 14%;
+  width: 72%;
+  height: 72%;
+  object-fit: contain;
+  /* Les images sont des aplats : l'ombre les pose sur la case. */
+  filter: drop-shadow(0 3px 3px rgba(20, 12, 4, 0.5));
+  pointer-events: none;
+  user-select: none;
   animation: pop 0.24s cubic-bezier(0.2, 0.9, 0.25, 1);
 }
 
@@ -171,13 +142,10 @@
   animation: flash 0.6s ease-out;
 }
 
-.winning .mark::before,
-.winning .mark::after {
-  background: #2a1c08;
-}
-
-.winning.round .mark {
-  border-color: #fff6e2;
+.winning .mark {
+  filter:
+    drop-shadow(0 0 6px rgba(255, 240, 200, 0.95))
+    drop-shadow(0 3px 3px rgba(20, 12, 4, 0.5));
 }
 
 @keyframes pop {
@@ -230,9 +198,11 @@
 }
 
 .primary {
-  border: none;
-  background: linear-gradient(135deg, var(--green), var(--green-deep));
-  color: #fff;
+  min-height: 58px;
+  padding: 0 4px;
+  font-size: 0.98rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .secondary {
@@ -289,8 +259,7 @@
     transition: none;
   }
 
-  .round .mark,
-  .cross .mark,
+  .mark,
   .winning {
     animation: none;
   }

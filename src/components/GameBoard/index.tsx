@@ -9,12 +9,13 @@ import Modal from '../Modal';
 import MultiplayerMenu from '../MultiplayerMenu';
 import PlayerBar from '../PlayerBar';
 import RulesPanel from '../RulesPanel';
+import PieceSetPicker from '../PieceSetPicker';
 import Toast from '../Toast';
 import { OPPONENTS } from '../HomeScreen';
 import { useGameContext } from '@/context/GameContext';
 import styles from './GameBoard.module.css';
 
-type Sheet = 'menu' | 'rules' | 'room' | null;
+type Sheet = 'menu' | 'rules' | 'room' | 'pieces' | null;
 
 const GameBoard = () => {
   const {
@@ -176,6 +177,14 @@ const GameBoard = () => {
             <button
               type="button"
               className={styles.menuItem}
+              onClick={() => setSheet('pieces')}
+            >
+              Changer de pions
+            </button>
+
+            <button
+              type="button"
+              className={styles.menuItem}
               onClick={() => setSheet('rules')}
             >
               Règles du jeu
@@ -207,6 +216,7 @@ const GameBoard = () => {
       )}
 
       {sheet === 'rules' && <RulesPanel onClose={() => setSheet(null)} />}
+      {sheet === 'pieces' && <PieceSetPicker onClose={() => setSheet(null)} />}
 
       {opponentLeft && (
         <Modal

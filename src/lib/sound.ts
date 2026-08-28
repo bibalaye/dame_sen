@@ -1,34 +1,69 @@
 /**
- * Sons du jeu, synthétisés à la volée.
+ * Sons du jeu.
  *
- * Aucun fichier audio : tout est fabriqué avec l'API Web Audio. Le jeu reste
- * léger, fonctionne hors-ligne et ne dépend d'aucun asset à héberger. Les
- * timbres cherchent la matière du plateau réel — bois posé, choc sec, note
- * grave à la promotion — plutôt que des bips de synthèse.
+ * Les timbres étaient synthétisés faute d'échantillons ; on joue désormais de
+ * vrais enregistrements — carte posée, jetons qui s'entrechoquent, dé lancé.
+ * Ils sont plus justes qu'un oscillateur, et pèsent quelques dizaines de
+ * kilo-octets.
+ *
+ * Le fichier reste tolérant : si le navigateur refuse de lire (autoplay bloqué,
+ * format non géré), le jeu continue sans un mot.
  */
 
-type Sound = 'move' | 'capture' | 'promote' | 'win' | 'lose' | 'illegal';
+export type Sound =
+  | 'move'
+  | 'capture'
+  | 'promote'
+  | 'win'
+  | 'lose'
+  | 'illegal'
+  | 'click'
+  | 'select';
 
-let context: AudioContext | null = null;
+const SFX_DIR = '/assets/sfx';
+
+/** Fichier et volume de chaque son, réglés les uns par rapport aux autres. */
+const CATALOGUE: Readonly<Record<Sound, { src: string; volume: number }>> = {
+  move: { src: `${SFX_DIR}/place.ogg`, volume: 0.55 },
+  capture: { src: `${SFX_DIR}/capture.ogg`, volume: 0.7 },
+  promote: { src: `${SFX_DIR}/promote.ogg`, volume: 0.6 },
+  win: { src: `${SFX_DIR}/capture2.ogg`, volume: 0.75 },
+  lose: { src: `${SFX_DIR}/slide.ogg`, volume: 0.5 },
+  illegal: { src: `${SFX_DIR}/switch.ogg`, volume: 0.35 },
+  click: { src: `${SFX_DIR}/click.ogg`, volume: 0.4 },
+  select: { src: `${SFX_DIR}/tap.ogg`, volume: 0.45 },
+};
+
 let muted = false;
-
 const STORAGE_KEY = 'dame-sen:muted';
 
-/** Le navigateur exige un geste de l'utilisateur avant de produire du son. */
-const getContext = (): AudioContext | null => {
+/**
+ * Un pool par son : rejouer le même échantillon avant la fin du précédent
+ * couperait le premier. Deux exemplaires suffisent au rythme du jeu.
+ */
+const POOL_SIZE = 2;
+const pools = new Map<Sound, HTMLAudioElement[]>();
+const cursors = new Map<Sound, number>();
+
+const acquire = (sound: Sound): HTMLAudioElement | null => {
   if (typeof window === 'undefined') return null;
 
-  if (!context) {
-    const Ctor =
-      window.AudioContext ??
-      (window as unknown as { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (!Ctor) return null;
-    context = new Ctor();
+  let pool = pools.get(sound);
+  if (!pool) {
+    const { src, volume } = CATALOGUE[sound];
+    pool = Array.from({ length: POOL_SIZE }, () => {
+      const audio = new Audio(src);
+      audio.volume = volume;
+      audio.preload = 'auto';
+      return audio;
+    });
+    pools.set(sound, pool);
+    cursors.set(sound, 0);
   }
 
-  if (context.state === 'suspended') void context.resume();
-  return context;
+  const index = cursors.get(sound) ?? 0;
+  cursors.set(sound, (index + 1) % pool.length);
+  return pool[index];
 };
 
 export const isMuted = (): boolean => muted;
@@ -38,7 +73,7 @@ export const loadMutePreference = (): boolean => {
   try {
     muted = window.localStorage.getItem(STORAGE_KEY) === '1';
   } catch {
-    // Navigation privée ou stockage refusé : on joue le son par défaut.
+    // Navigation privée ou stockage refusé : le son reste actif.
     muted = false;
   }
   return muted;
@@ -53,113 +88,32 @@ export const setMuted = (next: boolean): void => {
   }
 };
 
-/** Bruit blanc filtré : la matière des sons percussifs (bois, choc). */
-const noiseBurst = (
-  ctx: AudioContext,
-  at: number,
-  duration: number,
-  frequency: number,
-  gain: number,
-) => {
-  const frames = Math.floor(ctx.sampleRate * duration);
-  const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < frames; i++) {
-    // Décroissance exponentielle : l'attaque claque, la queue s'éteint vite.
-    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / frames, 2.5);
-  }
-
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-
-  const filter = ctx.createBiquadFilter();
-  filter.type = 'bandpass';
-  filter.frequency.value = frequency;
-  filter.Q.value = 1.4;
-
-  const amp = ctx.createGain();
-  amp.gain.value = gain;
-
-  source.connect(filter).connect(amp).connect(ctx.destination);
-  source.start(at);
-  source.stop(at + duration);
-};
-
-/** Note tenue, pour les moments qui doivent chanter plutôt que claquer. */
-const tone = (
-  ctx: AudioContext,
-  at: number,
-  duration: number,
-  frequency: number,
-  gain: number,
-  type: OscillatorType = 'triangle',
-) => {
-  const osc = ctx.createOscillator();
-  osc.type = type;
-  osc.frequency.value = frequency;
-
-  const amp = ctx.createGain();
-  amp.gain.setValueAtTime(0, at);
-  amp.gain.linearRampToValueAtTime(gain, at + 0.012);
-  amp.gain.exponentialRampToValueAtTime(0.0001, at + duration);
-
-  osc.connect(amp).connect(ctx.destination);
-  osc.start(at);
-  osc.stop(at + duration);
-};
-
 /**
- * Joue un son du jeu. `intensity` sert à la rafle : chaque prise enchaînée
- * monte d'un demi-ton, ce qui fait grimper la tension toute seule.
+ * Joue un son. `intensity` monte la hauteur d'un demi-ton par cran : une rafle
+ * gagne ainsi en tension à chaque prise enchaînée.
  */
 export const play = (sound: Sound, intensity = 0): void => {
   if (muted) return;
-  const ctx = getContext();
-  if (!ctx) return;
 
-  const now = ctx.currentTime;
-  const step = Math.pow(2, Math.min(intensity, 8) / 12);
+  const audio = acquire(sound);
+  if (!audio) return;
 
-  switch (sound) {
-    case 'move':
-      // Une pièce de bois posée sur la planche.
-      noiseBurst(ctx, now, 0.07, 1500, 0.28);
-      tone(ctx, now, 0.09, 190, 0.1, 'sine');
-      break;
-
-    case 'capture':
-      // Le choc de la prise, puis la pièce qui roule hors du plateau.
-      noiseBurst(ctx, now, 0.12, 900 * step, 0.4);
-      tone(ctx, now, 0.16, 130 * step, 0.16, 'square');
-      tone(ctx, now + 0.05, 0.14, 320 * step, 0.09);
-      break;
-
-    case 'promote':
-      // Trois notes qui montent : la pièce prend du galon.
-      tone(ctx, now, 0.22, 392, 0.14);
-      tone(ctx, now + 0.09, 0.22, 523, 0.14);
-      tone(ctx, now + 0.18, 0.36, 659, 0.16);
-      break;
-
-    case 'win':
-      [523, 659, 784, 1047].forEach((frequency, index) => {
-        tone(ctx, now + index * 0.11, 0.4, frequency, 0.15);
-      });
-      [0, 0.11, 0.22, 0.33].forEach((offset) => {
-        noiseBurst(ctx, now + offset, 0.1, 2400, 0.12);
-      });
-      break;
-
-    case 'lose':
-      [392, 349, 294].forEach((frequency, index) => {
-        tone(ctx, now + index * 0.14, 0.42, frequency, 0.13);
-      });
-      break;
-
-    case 'illegal':
-      tone(ctx, now, 0.1, 140, 0.1, 'sawtooth');
-      break;
+  try {
+    audio.currentTime = 0;
+    // Le navigateur borne la vitesse ; au-delà de deux, le son se déforme.
+    audio.playbackRate = Math.min(2, 1 + Math.min(intensity, 6) * 0.06);
+    const started = audio.play();
+    // Lecture refusée tant que l'utilisateur n'a pas interagi : sans importance.
+    if (started) void started.catch(() => undefined);
+  } catch {
+    // Élément audio indisponible : le jeu continue en silence.
   }
+};
+
+/** Charge les échantillons pour que le premier coup ne soit pas muet. */
+export const preloadSounds = (): void => {
+  if (typeof window === 'undefined') return;
+  (Object.keys(CATALOGUE) as Sound[]).forEach((sound) => acquire(sound));
 };
 
 /**

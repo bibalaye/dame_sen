@@ -134,7 +134,7 @@ const StatsPanel: React.FC<StatsPanelProps> = ({ onClose }) => {
                 <div className={styles.confirmActions}>
                   <button
                     type="button"
-                    className={styles.danger}
+                    className={`uiButton uiButtonDanger ${styles.danger}`}
                     onClick={() => {
                       clearHistory();
                       setConfirmClear(false);

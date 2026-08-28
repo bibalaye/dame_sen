@@ -103,7 +103,7 @@ const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
         )}
 
         <div className={styles.actions}>
-          <button type="button" className={styles.rematch} onClick={onRematch}>
+          <button type="button" className={`uiButton ${styles.rematch}`} onClick={onRematch}>
             Revanche
           </button>
           <button type="button" className={styles.secondary} onClick={onShare}>

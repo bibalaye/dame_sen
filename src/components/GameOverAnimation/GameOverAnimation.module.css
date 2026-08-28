@@ -98,9 +98,11 @@
 }
 
 .rematch {
-  border: none;
-  background: linear-gradient(135deg, var(--green), var(--green-deep));
-  color: #fff;
+  min-height: 58px;
+  padding: 0 4px;
+  font-size: 0.98rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .secondary {

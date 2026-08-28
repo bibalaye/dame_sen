@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import Cell from '../Cell';
 import { useGameContext } from '@/context/GameContext';
 import {
@@ -27,6 +28,7 @@ const Board = () => {
     handleCellClick,
     isFlipped,
     gameId,
+    pieceSet,
     BOARD_SIZE,
   } = useGameContext();
 
@@ -149,7 +151,25 @@ const Board = () => {
                   width: `${cellPercent}%`,
                   height: `${cellPercent}%`,
                 }}
-              />
+              >
+                <Image
+                  className={styles.pieceImage}
+                  src={
+                    piece.player === 'white'
+                      ? piece.isKing
+                        ? pieceSet.lightKing
+                        : pieceSet.light
+                      : piece.isKing
+                        ? pieceSet.darkKing
+                        : pieceSet.dark
+                  }
+                  width={64}
+                  height={64}
+                  alt=""
+                  draggable={false}
+                  priority
+                />
+              </div>
             );
           })}
         </div>

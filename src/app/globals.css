@@ -1,6 +1,18 @@
 @import "tailwindcss";
 
 /*
+ * Police du jeu. « Kenney Future » accompagne les illustrations : anguleuse,
+ * lisible en petit, elle donne le ton d'un jeu plutôt que d'un formulaire. Elle
+ * est réservée aux titres et aux chiffres — en texte courant, elle fatigue.
+ */
+@font-face {
+  font-family: 'Kenney Future';
+  src: url('/assets/font/KenneyFutureNarrow.ttf') format('truetype');
+  font-weight: 400 800;
+  font-display: swap;
+}
+
+/*
  * Les couleurs viennent des matériaux du jeu — bois de la planche, cauri,
  * graine, laiton, indigo — et non du drapeau appliqué en aplats. Le vert et le
  * jaune restent présents, mais comme accents, là où ils servent la lecture.
@@ -53,6 +65,8 @@
   --dot-capture: rgba(194, 69, 44, 0.85);
   --dot-hint: rgba(35, 74, 125, 0.7);
   --focus: #046b36;
+
+  --font-display: 'Kenney Future', 'Segoe UI', Tahoma, sans-serif;
 
   --shadow-soft: 0 10px 30px -14px rgba(51, 38, 26, 0.5);
   --shadow-lift: 0 20px 44px -18px rgba(51, 38, 26, 0.6);
@@ -165,4 +179,86 @@ body {
 
 button {
   font-family: inherit;
+}
+
+/*
+ * Boutons habillés par les images d'interface.
+ *
+ * Les fichiers font 192×64 avec un relief en bas. On les découpe en neuf zones
+ * (`border-image`) : les coins gardent leur forme, les bords s'étirent, et le
+ * bouton s'adapte à n'importe quelle largeur sans se déformer.
+ *
+ * Le fond dessiné vient d'une image, mais la mise en page reste au CSS : ces
+ * classes s'ajoutent aux boutons existants sans rien changer à leur structure.
+ */
+.uiButton {
+  position: relative;
+  border-style: solid;
+  border-width: 22px 26px 30px;
+  border-image-slice: 22 26 30 fill;
+  border-image-width: 22px 26px 30px;
+  border-image-repeat: stretch;
+  border-image-source: url('/assets/ui/button-primary.png');
+  background-color: #e8b427;
+  background-clip: padding-box;
+  /* Le contenu se replace dans la zone centrale du découpage. */
+  margin: 0;
+  padding: 0;
+  color: #40320a;
+  font-family: var(--font-display);
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.uiButton:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-2px);
+}
+
+/* Le bouton s'enfonce : le relief de l'image rend le geste crédible. */
+.uiButton:active:not(:disabled) {
+  transform: translateY(2px);
+  filter: brightness(0.96);
+}
+
+.uiButton:disabled {
+  filter: grayscale(0.7) brightness(0.9);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.uiButton:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.uiButtonNeutral {
+  border-image-source: url('/assets/ui/button-neutral.png');
+  background-color: #d3d5d9;
+  color: #2f3033;
+}
+
+.uiButtonDanger {
+  border-image-source: url('/assets/ui/button-danger.png');
+  background-color: #d3453c;
+  color: #fff2f0;
+}
+
+.uiButtonConfirm {
+  border-image-source: url('/assets/ui/button-confirm.png');
+  background-color: #6fbf4b;
+  color: #12331c;
+}
+
+.uiButtonInfo {
+  border-image-source: url('/assets/ui/button-info.png');
+  background-color: #3a8fd0;
+  color: #f0f7ff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uiButton {
+    transition: none;
+  }
 }

@@ -95,7 +95,7 @@ const DailyPanel: React.FC = () => {
           <>
             <pre className={styles.share}>{shareDaily()}</pre>
             <div className={styles.actions}>
-              <button type="button" className={styles.primary} onClick={handleShare}>
+              <button type="button" className={`uiButton ${styles.primary}`} onClick={handleShare}>
                 {copied ? 'Copié !' : 'Partager'}
               </button>
               <button type="button" className={styles.secondary} onClick={goHome}>
@@ -105,7 +105,7 @@ const DailyPanel: React.FC = () => {
             <p className={styles.footnote}>Un nouveau défi vous attend demain.</p>
           </>
         ) : (
-          <button type="button" className={styles.primary} onClick={retryDaily}>
+          <button type="button" className={`uiButton ${styles.primary}`} onClick={retryDaily}>
             Nouvel essai · {attemptsLeft} restant{attemptsLeft > 1 ? 's' : ''}
           </button>
         )}

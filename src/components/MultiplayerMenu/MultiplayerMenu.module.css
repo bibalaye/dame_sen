@@ -76,15 +76,12 @@
 .btn {
   width: 100%;
   padding: 14px 20px;
-  border: none;
-  border-radius: 50px;
-  font-family: inherit;
   font-size: 1rem;
-  font-weight: 700;
-  cursor: pointer;
-  background: linear-gradient(135deg, var(--green), var(--green-deep));
-  color: #ffffff;
-  transition: transform 0.16s ease, opacity 0.16s ease;
+  min-height: 58px;
+  padding: 0 4px;
+  font-size: 0.98rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .btn:hover:not(:disabled) {
