@@ -69,6 +69,37 @@ Rien n'empêche non plus de tout servir depuis `server.js` : il sert la page
 Next et les websockets sur le même port, et aucune variable n'est alors
 nécessaire.
 
+### Garder le serveur éveillé (Render, offres gratuites)
+
+Render suspend un service gratuit après un quart d'heure sans requête, et la
+reprise prend ensuite près d'une minute — pendant laquelle aucune partie en
+ligne ne peut démarrer.
+
+Deux mécanismes s'en occupent :
+
+1. **Le service s'appelle lui-même** toutes les cinq minutes. Rien à faire :
+   Render publie `RENDER_EXTERNAL_URL`, que `server.js` utilise seul. Pour
+   forcer une autre adresse ou un autre rythme :
+
+   ```bash
+   KEEP_ALIVE_URL=https://votre-serveur.onrender.com
+   KEEP_ALIVE_MINUTES=5
+   ```
+
+2. **Un appel extérieur**, car un service *déjà* suspendu ne peut pas se
+   réveiller seul. Le workflow `.github/workflows/keep-alive.yml` s'en charge :
+   définissez la variable de dépôt `REALTIME_SERVER_URL` dans
+   *Settings → Secrets and variables → Actions → Variables*.
+
+   GitHub ne garantit pas la ponctualité des tâches planifiées — des retards de
+   cinq à quinze minutes sont courants. Pour un réveil fiable, un service de
+   surveillance dédié (UptimeRobot, cron-job.org) appelant `/healthz` fait
+   mieux.
+
+> À noter : un service qui ne dort jamais consomme environ 730 heures par mois,
+> soit la quasi-totalité des 750 heures gratuites de Render. Cela ne laisse pas
+> la place à un second service sur le même compte.
+
 ### Limite connue
 
 Les salles vivent en mémoire, dans une seule instance. Le service temps réel ne

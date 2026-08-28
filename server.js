@@ -180,10 +180,50 @@ app.prepare().then(() => {
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Origines autorisées : ${allowedOrigin}`);
+    startKeepAlive();
   });
 });
 
 // Helper function to generate a random room ID
 function generateRoomId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+/**
+ * Maintien en éveil.
+ *
+ * Les offres gratuites — Render en tête — suspendent un service qui ne reçoit
+ * aucune requête pendant un quart d'heure. La reprise prend ensuite près d'une
+ * minute, pendant laquelle une partie en ligne ne peut pas démarrer.
+ *
+ * Le service s'appelle donc lui-même à intervalle régulier. Cela suffit à
+ * empêcher la mise en veille tant qu'il tourne ; en revanche, un service déjà
+ * endormi ne peut pas se réveiller seul — il faut pour cela un appel venu de
+ * l'extérieur (voir le workflow .github/workflows/keep-alive.yml).
+ *
+ * KEEP_ALIVE_URL force l'adresse à appeler ; sinon on prend celle que Render
+ * publie de lui-même. Sans l'une ni l'autre — en développement — rien ne tourne.
+ */
+function startKeepAlive() {
+  const target = process.env.KEEP_ALIVE_URL || process.env.RENDER_EXTERNAL_URL;
+  if (!target) return;
+
+  const minutes = Number(process.env.KEEP_ALIVE_MINUTES || 5);
+  const url = `${target.replace(/\/$/, '')}/healthz`;
+
+  console.log(`Maintien en éveil : ${url} toutes les ${minutes} min`);
+
+  const timer = setInterval(() => {
+    fetch(url)
+      .then((res) => {
+        if (!res.ok) console.warn(`Maintien en éveil : réponse ${res.status}`);
+      })
+      .catch((err) => {
+        // Une coupure réseau passagère ne doit pas arrêter le service.
+        console.warn('Maintien en éveil : appel échoué —', err.message);
+      });
+  }, minutes * 60 * 1000);
+
+  // Ne pas retenir le processus si tout le reste s'arrête.
+  timer.unref?.();
 }

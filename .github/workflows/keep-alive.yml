@@ -1,0 +1,48 @@
+# Réveille le serveur temps réel.
+#
+# Le service s'appelle déjà lui-même tant qu'il tourne, mais un service déjà
+# suspendu ne peut pas se réveiller seul : cet appel venu de l'extérieur s'en
+# charge.
+#
+# À savoir : GitHub ne garantit pas la ponctualité des tâches planifiées. Les
+# retards de cinq à quinze minutes sont fréquents aux heures chargées. Pour un
+# réveil ponctuel, un service de surveillance dédié (UptimeRobot, cron-job.org)
+# est plus fiable — il suffit de lui faire appeler la même adresse.
+name: Maintien en éveil
+
+on:
+  schedule:
+    # Toutes les cinq minutes.
+    - cron: '*/5 * * * *'
+  # Permet aussi de déclencher un réveil à la main depuis l'onglet Actions.
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Appeler la sonde de santé
+        env:
+          # À définir dans Settings → Secrets and variables → Actions → Variables
+          # Exemple : https://mon-serveur.onrender.com
+          SERVER_URL: ${{ vars.REALTIME_SERVER_URL }}
+        run: |
+          if [ -z "$SERVER_URL" ]; then
+            echo "REALTIME_SERVER_URL n'est pas défini — rien à réveiller."
+            exit 0
+          fi
+
+          echo "Appel de $SERVER_URL/healthz"
+          # Une reprise après suspension peut prendre près d'une minute.
+          code=$(curl --silent --show-error --location \
+                      --max-time 90 --retry 2 --retry-delay 10 \
+                      --output /tmp/reponse.json --write-out '%{http_code}' \
+                      "$SERVER_URL/healthz")
+
+          echo "Réponse HTTP $code"
+          cat /tmp/reponse.json || true
+          echo
+
+          if [ "$code" != "200" ]; then
+            echo "::warning::Le serveur n'a pas répondu correctement ($code)"
+          fi

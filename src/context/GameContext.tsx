@@ -288,6 +288,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const isMultiplayer = mode === 'online';
 
+  /**
+   * Le jeu réellement en cours. En ligne, la salle décide : les deux messages
+   * du serveur peuvent arriver dans le même lot, et `kind` accuserait alors un
+   * rendu de retard.
+   */
+  const activeKind: GameKind = roomGame ?? kind;
+
   useEffect(() => {
     setMutedState(loadMutePreference());
   }, []);
@@ -370,7 +377,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // --- Démarrage et arrêt -------------------------------------------------
 
   const beginGame = useCallback((options: StartOptions) => {
-    setKind(options.kind ?? 'dames');
+    // Sans jeu explicite, on garde celui en cours : l'effet de démarrage d'une
+    // partie en ligne appelle `beginGame` sans le préciser, et ramenait sinon
+    // les deux joueurs aux dames au moment même où la partie commençait.
+    if (options.kind) setKind(options.kind);
     if (options.morpionVariant) setMorpionVariant(options.morpionVariant);
     const nextVariant = options.variant ?? 'classic';
 
@@ -657,10 +667,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // --- Multijoueur --------------------------------------------------------
 
   useEffect(() => {
-    if (roomGame && roomGame !== kind) setKind(roomGame);
-  }, [roomGame, kind]);
-
-  useEffect(() => {
     if (opponent) {
       setIsWaitingForOpponent(false);
       setNotice(`${opponent} a rejoint la partie !`);
@@ -668,17 +674,17 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [opponent]);
 
   useEffect(() => {
-    if (isMultiplayer && isGameStarted && kind === 'dames') {
+    if (isMultiplayer && isGameStarted && activeKind === 'dames') {
       beginGame({ mode: 'online', timeControl: clock.control, variant });
     }
     // `clock.control` et `variant` sont lus au démarrage, sans relancer l'effet.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isGameStarted, isMultiplayer, beginGame]);
+  }, [isGameStarted, isMultiplayer, beginGame, activeKind]);
 
   useEffect(() => {
     // Le morpion en ligne gère ses propres échanges : ce moteur-ci ne doit pas
     // tenter d'appliquer un coup qui ne lui est pas destiné.
-    if (!socket || !isMultiplayer || kind !== 'dames') return;
+    if (!socket || !isMultiplayer || activeKind !== 'dames') return;
 
     const handleOpponentMove = ({ move }: { move: Move }) => {
       const current = gameRef.current;
@@ -702,14 +708,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => {
       socket.off('opponent-move', handleOpponentMove);
     };
-  }, [socket, isMultiplayer, kind]);
+  }, [socket, isMultiplayer, activeKind]);
 
   useEffect(() => {
-    if (!isMultiplayer || !winner || kind !== 'dames') return;
+    if (!isMultiplayer || !winner || activeKind !== 'dames') return;
     if (reportedWinner.current === winner) return;
     reportedWinner.current = winner;
     notifyGameOver(winner);
-  }, [isMultiplayer, winner, notifyGameOver, kind]);
+  }, [isMultiplayer, winner, notifyGameOver, activeKind]);
 
   // --- Interaction --------------------------------------------------------
 
@@ -807,7 +813,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const value = useMemo<GameContextType>(
     () => ({
       screen,
-      kind,
+      kind: activeKind,
       morpionVariant,
       mode,
       board: game.board,
@@ -862,9 +868,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       joinRoom,
     }),
     [
+      activeKind,
       alert,
       bestChain,
-      kind,
       morpionVariant,
       blackPieces,
       clock,
