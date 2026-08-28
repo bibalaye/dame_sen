@@ -4,10 +4,12 @@ import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import StatsPanel from '../StatsPanel';
 import PieceSetPicker from '../PieceSetPicker';
+import RulesPicker from '../RulesPicker';
 import { computeStats } from '@/lib/history';
 import { useGameContext, type GameKind, type GameMode } from '@/context/GameContext';
 import { TIME_CONTROLS, type TimeControl } from '@/lib/clock';
 import { MORPION_OPPONENTS, type MorpionVariant } from '@/lib/morpion';
+import { DEFAULT_RULES, type RuleSet } from '@/lib/engine';
 import type { Difficulty } from '@/lib/ai';
 import { play } from '@/lib/sound';
 import styles from './HomeScreen.module.css';
@@ -120,6 +122,8 @@ const HomeScreen: React.FC = () => {
   const { startGame, history, pieceSet } = useGameContext();
   const [statsOpen, setStatsOpen] = useState(false);
   const [piecesOpen, setPiecesOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rules, setRules] = useState<RuleSet>(DEFAULT_RULES);
 
   const stats = useMemo(() => computeStats(history), [history]);
 
@@ -157,6 +161,10 @@ const HomeScreen: React.FC = () => {
         : 'Jouer';
 
   const chosenOpponent = opponents.find((entry) => entry.id === difficulty);
+
+  const changedRules = (Object.keys(DEFAULT_RULES) as (keyof RuleSet)[]).filter(
+    (key) => rules[key] !== DEFAULT_RULES[key],
+  ).length;
 
   return (
     <div className={styles.screen}>
@@ -274,6 +282,25 @@ const HomeScreen: React.FC = () => {
             <>
               <hr className="uiDivider" />
               <section className={styles.block}>
+                <h2 className={styles.label}>Règles du jeu</h2>
+                <button
+                  type="button"
+                  className={styles.rulesButton}
+                  onClick={() => setRulesOpen(true)}
+                >
+                  <span className={styles.rulesText}>
+                    {changedRules === 0
+                      ? 'Règles traditionnelles'
+                      : `${changedRules} règle${changedRules > 1 ? 's' : ''} modifiée${changedRules > 1 ? 's' : ''}`}
+                  </span>
+                  <span className={styles.rulesMore} aria-hidden="true">
+                    Choisir ›
+                  </span>
+                </button>
+              </section>
+
+              <hr className="uiDivider" />
+              <section className={styles.block}>
                 <h2 className={styles.label}>Cadence</h2>
                 <div className={styles.segments} role="group">
                   {TIME_OPTIONS.map((id) => (
@@ -333,6 +360,13 @@ const HomeScreen: React.FC = () => {
 
       {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
       {piecesOpen && <PieceSetPicker onClose={() => setPiecesOpen(false)} />}
+      {rulesOpen && (
+        <RulesPicker
+          rules={rules}
+          onChange={setRules}
+          onClose={() => setRulesOpen(false)}
+        />
+      )}
 
       <div className={styles.launcher}>
         <button
@@ -340,7 +374,7 @@ const HomeScreen: React.FC = () => {
           className={`uiButton ${styles.play}`}
           onClick={() => {
             play('select');
-            startGame({ kind, mode, difficulty, timeControl, morpionVariant });
+            startGame({ kind, mode, difficulty, timeControl, morpionVariant, rules });
           }}
         >
           <Image src="/assets/ui/icon-play.png" alt="" width={18} height={20} />

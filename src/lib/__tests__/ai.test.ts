@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   BOARD_SIZE,
+  DEFAULT_RULES,
   createGame,
   generateMoves,
   legalMoves,
@@ -50,6 +51,7 @@ const gameFrom = (rows: readonly string[], currentPlayer: Player): GameState => 
   lastCapture: null,
   lastPromotion: false,
   chainLength: 0,
+  rules: DEFAULT_RULES,
 });
 
 /** Générateur pseudo-aléatoire déterministe, pour des parties reproductibles. */

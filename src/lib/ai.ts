@@ -14,6 +14,7 @@
 
 import {
   BOARD_SIZE,
+  DEFAULT_RULES,
   countPieces,
   generateMoves,
   legalMoves,
@@ -23,6 +24,7 @@ import {
   type GameState,
   type Move,
   type Player,
+  type RuleSet,
 } from './engine.ts';
 
 /** Les quatre adversaires proposés au joueur. */
@@ -66,7 +68,11 @@ const CENTER_BONUS: readonly (readonly number[])[] = [
  * de promotion ; l'occupation du centre ; et la mobilité, qui pousse l'IA à ne
  * pas s'enfermer — c'est la façon la plus directe de perdre sur ce plateau.
  */
-export const evaluate = (board: Board, player: Player): number => {
+export const evaluate = (
+  board: Board,
+  player: Player,
+  rules: RuleSet = DEFAULT_RULES,
+): number => {
   const enemy = opponentOf(player);
   let score = 0;
 
@@ -90,7 +96,8 @@ export const evaluate = (board: Board, player: Player): number => {
   }
 
   const mobility =
-    generateMoves(board, player).length - generateMoves(board, enemy).length;
+    generateMoves(board, player, rules).length -
+    generateMoves(board, enemy, rules).length;
   score += mobility * 3;
 
   return score;
@@ -139,12 +146,12 @@ const negamax = (
     return terminalScore(state, ctx.rootPlayer, ply);
   }
   if (depth <= 0 || ctx.aborted) {
-    return evaluate(state.board, ctx.rootPlayer);
+    return evaluate(state.board, ctx.rootPlayer, state.rules);
   }
 
   const moves = orderMoves(legalMoves(state));
   if (moves.length === 0) {
-    return evaluate(state.board, ctx.rootPlayer);
+    return evaluate(state.board, ctx.rootPlayer, state.rules);
   }
 
   // Le trait ne change pas au milieu d'une rafle : c'est toujours au joueur

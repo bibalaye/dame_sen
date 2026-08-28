@@ -2,6 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  DEFAULT_RULES,
   createGame,
   playMove,
   type Board,
@@ -45,6 +46,7 @@ const gameFrom = (rows: readonly string[], currentPlayer: Player): GameState => 
   lastCapture: null,
   lastPromotion: false,
   chainLength: 0,
+  rules: DEFAULT_RULES,
 });
 
 describe('identité des pièces', () => {

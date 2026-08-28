@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   BOARD_SIZE,
+  DEFAULT_RULES,
   countPieces,
   createBoard,
   createGame,
@@ -58,6 +59,7 @@ const gameFrom = (rows: readonly string[], currentPlayer: Player): GameState => 
   lastCapture: null,
   lastPromotion: false,
   chainLength: 0,
+  rules: DEFAULT_RULES,
 });
 
 const move = (

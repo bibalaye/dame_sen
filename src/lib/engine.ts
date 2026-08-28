@@ -64,6 +64,41 @@ export type Status =
 /** Les trois dispositions de départ étudiées. */
 export type Variant = 'classic' | 'open-center' | 'free-drop';
 
+/**
+ * Les règles que l'on peut activer ou non avant la partie.
+ *
+ * Les valeurs par défaut décrivent le jeu tel qu'il se joue traditionnellement ;
+ * chacune se débranche pour explorer une autre façon de jouer. Elles voyagent
+ * dans l'état de la partie, si bien qu'une position se juge toujours avec les
+ * règles sous lesquelles elle a été jouée.
+ */
+export interface RuleSet {
+  /** La prise passe avant tout : dès qu'elle existe, elle est seule permise. */
+  readonly mandatoryCapture: boolean;
+  /** Le pion peut revenir en arrière, et non plus seulement avancer. */
+  readonly backwardMove: boolean;
+  /** Le pion prend aussi dans son dos, comme la dame. */
+  readonly backwardCapture: boolean;
+  /** La dame choisit sa case d'arrivée au-delà de la pièce prise. */
+  readonly flyingKing: boolean;
+  /** Réduit à une seule pièce, un camp la reçoit en dame. */
+  readonly loneSurvivorKing: boolean;
+  /** Devenir dame met fin au tour, même au milieu d'une rafle. */
+  readonly promotionEndsTurn: boolean;
+  /** Entre plusieurs prises, il faut choisir celle qui en enchaîne le plus. */
+  readonly maximalCapture: boolean;
+}
+
+export const DEFAULT_RULES: RuleSet = {
+  mandatoryCapture: true,
+  backwardMove: false,
+  backwardCapture: false,
+  flyingKing: true,
+  loneSurvivorKing: true,
+  promotionEndsTurn: false,
+  maximalCapture: false,
+};
+
 export interface GameState {
   readonly board: Board;
   readonly currentPlayer: Player;
@@ -84,6 +119,8 @@ export interface GameState {
   readonly lastPromotion: boolean;
   /** Prises enchaînées par le tour en cours : 3 pour une rafle triple. */
   readonly chainLength: number;
+  /** Les règles sous lesquelles cette partie se joue. */
+  readonly rules: RuleSet;
 }
 
 /** Coups complets sans prise ni promotion au bout desquels la partie est nulle. */
@@ -187,6 +224,7 @@ export const generateCapturesForPiece = (
   board: Board,
   row: number,
   col: number,
+  rules: RuleSet = DEFAULT_RULES,
 ): Move[] => {
   const piece = pieceAt(board, row, col);
   if (!piece) return [];
@@ -206,8 +244,8 @@ export const generateCapturesForPiece = (
       if (!isInside(r, c)) continue;
       if (board[r][c]!.player !== enemy) continue;
 
-      // La dame vole : elle peut s'arrêter sur n'importe quelle case libre
-      // au-delà de la pièce prise, pas seulement sur la première.
+      // La dame vole : elle s'arrête sur la case libre de son choix au-delà de
+      // la pièce prise. Sans cette règle, elle se pose juste derrière.
       let landRow = r + dir.row;
       let landCol = c + dir.col;
       while (isInside(landRow, landCol) && !board[landRow][landCol]) {
@@ -219,6 +257,7 @@ export const generateCapturesForPiece = (
           captureRow: r,
           captureCol: c,
         });
+        if (!rules.flyingKing) break;
         landRow += dir.row;
         landCol += dir.col;
       }
@@ -227,14 +266,15 @@ export const generateCapturesForPiece = (
     return captures;
   }
 
-  // Un pion prend là où il peut aller : devant lui et sur les côtés, jamais
-  // derrière. Une pièce dépassée est hors de danger.
+  // Un pion prend devant lui et sur les côtés ; la prise dans le dos ne
+  // s'ouvre que si la règle est activée.
   const forward = forwardOf(piece.player);
-  const pawnDirections: readonly Position[] = [
+  const pawnDirections: Position[] = [
     { row: forward, col: 0 },
     { row: 0, col: -1 },
     { row: 0, col: 1 },
   ];
+  if (rules.backwardCapture) pawnDirections.push({ row: -forward, col: 0 });
 
   for (const dir of pawnDirections) {
     const overRow = row + dir.row;
@@ -264,6 +304,7 @@ export const generateQuietMovesForPiece = (
   board: Board,
   row: number,
   col: number,
+  rules: RuleSet = DEFAULT_RULES,
 ): Move[] => {
   const piece = pieceAt(board, row, col);
   if (!piece) return [];
@@ -284,11 +325,12 @@ export const generateQuietMovesForPiece = (
   }
 
   const forward = forwardOf(piece.player);
-  const steps: readonly Position[] = [
+  const steps: Position[] = [
     { row: forward, col: 0 },
     { row: 0, col: -1 },
     { row: 0, col: 1 },
   ];
+  if (rules.backwardMove) steps.push({ row: -forward, col: 0 });
 
   for (const step of steps) {
     const r = row + step.row;
@@ -305,7 +347,11 @@ export const generateQuietMovesForPiece = (
  * Tous les coups légaux d'un joueur, capture obligatoire appliquée : dès qu'une
  * prise existe quelque part, elle est la seule option.
  */
-export const generateMoves = (board: Board, player: Player): Move[] => {
+export const generateMoves = (
+  board: Board,
+  player: Player,
+  rules: RuleSet = DEFAULT_RULES,
+): Move[] => {
   const captures: Move[] = [];
   const quiet: Move[] = [];
 
@@ -314,14 +360,53 @@ export const generateMoves = (board: Board, player: Player): Move[] => {
       const piece = board[row][col];
       if (!piece || piece.player !== player) continue;
 
-      captures.push(...generateCapturesForPiece(board, row, col));
-      if (captures.length === 0) {
-        quiet.push(...generateQuietMovesForPiece(board, row, col));
-      }
+      captures.push(...generateCapturesForPiece(board, row, col, rules));
+      quiet.push(...generateQuietMovesForPiece(board, row, col, rules));
     }
   }
 
-  return captures.length > 0 ? captures : quiet;
+  if (captures.length === 0) return quiet;
+
+  // Sans obligation, le joueur garde le choix entre prendre et se déplacer.
+  if (!rules.mandatoryCapture) return [...captures, ...quiet];
+
+  return rules.maximalCapture ? keepLongestChains(board, captures, rules) : captures;
+};
+
+/**
+ * Ne conserve que les prises qui mènent à la rafle la plus longue.
+ *
+ * On mesure chaque candidate en déroulant l'enchaînement qu'elle ouvre : c'est
+ * la seule façon de comparer deux prises dont l'une paraît anodine mais permet
+ * d'en enchaîner trois.
+ */
+const keepLongestChains = (
+  board: Board,
+  captures: readonly Move[],
+  rules: RuleSet,
+): Move[] => {
+  const depth = (move: Move): number => {
+    const { board: next, promoted } = applyMove(board, move);
+    if (promoted && rules.promotionEndsTurn) return 1;
+
+    const following = generateCapturesForPiece(next, move.toRow, move.toCol, rules);
+    if (following.length === 0) return 1;
+    return 1 + Math.max(...following.map((m) => chainDepth(next, m, rules)));
+  };
+
+  const scored = captures.map((move) => ({ move, length: depth(move) }));
+  const best = Math.max(...scored.map((entry) => entry.length));
+  return scored.filter((entry) => entry.length === best).map((entry) => entry.move);
+};
+
+/** Longueur de la rafle ouverte par un coup, à partir d'une position donnée. */
+const chainDepth = (board: Board, move: Move, rules: RuleSet): number => {
+  const { board: next, promoted } = applyMove(board, move);
+  if (promoted && rules.promotionEndsTurn) return 1;
+
+  const following = generateCapturesForPiece(next, move.toRow, move.toCol, rules);
+  if (following.length === 0) return 1;
+  return 1 + Math.max(...following.map((m) => chainDepth(next, m, rules)));
 };
 
 /** Les coups légaux dans l'état courant, rafle en cours comprise. */
@@ -332,9 +417,10 @@ export const legalMoves = (state: GameState): Move[] => {
       state.board,
       state.chainFrom.row,
       state.chainFrom.col,
+      state.rules,
     );
   }
-  return generateMoves(state.board, state.currentPlayer);
+  return generateMoves(state.board, state.currentPlayer, state.rules);
 };
 
 /** Les coups légaux partant d'une case donnée. */
@@ -364,7 +450,11 @@ export const countPieces = (board: Board, player: Player): number => {
  *
  * Renvoie le plateau reçu tel quel quand rien ne change.
  */
-export const promoteLoneSurvivor = (board: Board): Board => {
+export const promoteLoneSurvivor = (
+  board: Board,
+  rules: RuleSet = DEFAULT_RULES,
+): Board => {
+  if (!rules.loneSurvivorKing) return board;
   let promoted: Square[][] | null = null;
 
   for (const player of ['white', 'black'] as const) {
@@ -435,11 +525,12 @@ export const evaluateStatus = (
   playerToMove: Player,
   halfmoveClock: number,
   positionCounts: Readonly<Record<string, number>>,
+  rules: RuleSet = DEFAULT_RULES,
 ): Status => {
   if (countPieces(board, playerToMove) === 0) {
     return { kind: 'win', winner: opponentOf(playerToMove), reason: 'capture' };
   }
-  if (generateMoves(board, playerToMove).length === 0) {
+  if (generateMoves(board, playerToMove, rules).length === 0) {
     return { kind: 'win', winner: opponentOf(playerToMove), reason: 'block' };
   }
   if (halfmoveClock >= NO_PROGRESS_LIMIT * 2) {
@@ -454,6 +545,7 @@ export const evaluateStatus = (
 export const createGame = (
   variant: Variant = 'classic',
   firstPlayer: Player = 'white',
+  rules: RuleSet = DEFAULT_RULES,
 ): GameState => {
   const board = createBoard(variant);
   return {
@@ -467,6 +559,7 @@ export const createGame = (
     lastCapture: null,
     lastPromotion: false,
     chainLength: 0,
+    rules,
   };
 };
 
@@ -489,13 +582,14 @@ export const playMove = (state: GameState, move: Move): GameState => {
 
   const applied = applyMove(state.board, legal);
   const { captured, promoted } = applied;
-  const board = promoteLoneSurvivor(applied.board);
+  const board = promoteLoneSurvivor(applied.board, state.rules);
 
-  // Une prise appelle la suivante. Devenir dame en cours de rafle n'y met pas
-  // fin : la pièce poursuit l'enchaînement, désormais avec la portée d'une dame.
+  // Une prise appelle la suivante. Devenir dame n'interrompt l'enchaînement que
+  // si la règle correspondante est activée.
   const canChain =
     captured !== null &&
-    generateCapturesForPiece(board, legal.toRow, legal.toCol).length > 0;
+    !(promoted && state.rules.promotionEndsTurn) &&
+    generateCapturesForPiece(board, legal.toRow, legal.toCol, state.rules).length > 0;
 
   const capturedAt =
     captured && legal.captureRow !== undefined && legal.captureCol !== undefined
@@ -536,11 +630,18 @@ export const playMove = (state: GameState, move: Move): GameState => {
     chainFrom: null,
     halfmoveClock,
     positionCounts,
-    status: evaluateStatus(board, nextPlayer, halfmoveClock, positionCounts),
+    status: evaluateStatus(
+      board,
+      nextPlayer,
+      halfmoveClock,
+      positionCounts,
+      state.rules,
+    ),
     lastMove: legal,
     lastCapture: capturedAt,
     lastPromotion: promoted,
     chainLength,
+    rules: state.rules,
   };
 };
 

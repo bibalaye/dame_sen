@@ -16,6 +16,7 @@ import {
   countPieces,
   createGame,
   hasMandatoryCapture,
+  DEFAULT_RULES,
   legalMovesFrom,
   movablePositions,
   opponentOf,
@@ -25,6 +26,7 @@ import {
   type Move,
   type Player,
   type Position,
+  type RuleSet,
   type Status,
   type Variant,
 } from '@/lib/engine';
@@ -110,6 +112,8 @@ export interface DailyState {
 
 export interface StartOptions {
   readonly kind?: GameKind;
+  /** Règles choisies avant la partie ; les valeurs absentes gardent la coutume. */
+  readonly rules?: RuleSet;
   readonly morpionVariant?: MorpionVariant;
   readonly mode: GameMode;
   readonly difficulty?: Difficulty;
@@ -121,6 +125,8 @@ interface GameContextType {
   screen: Screen;
   kind: GameKind;
   morpionVariant: MorpionVariant;
+  /** Règles en vigueur pour la partie de dames en cours. */
+  rules: RuleSet;
   mode: GameMode;
   board: Board;
   currentPlayer: Player;
@@ -297,6 +303,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [screen, setScreen] = useState<Screen>('home');
   const [kind, setKind] = useState<GameKind>('dames');
   const [morpionVariant, setMorpionVariant] = useState<MorpionVariant>('moving-heart');
+  const [rules, setRules] = useState<RuleSet>(DEFAULT_RULES);
   const [mode, setMode] = useState<GameMode>('solo');
   const [variant, setVariant] = useState<Variant>('classic');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
@@ -449,6 +456,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // les deux joueurs aux dames au moment même où la partie commençait.
     if (options.kind) setKind(options.kind);
     if (options.morpionVariant) setMorpionVariant(options.morpionVariant);
+    const nextRules = options.rules ?? rules;
+    if (options.rules) setRules(options.rules);
     const nextVariant = options.variant ?? 'classic';
 
     // Le défi du jour ne part pas d'une position de départ mais du puzzle du
@@ -470,7 +479,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             },
       );
     } else {
-      fresh = createGame(nextVariant);
+      fresh = createGame(nextVariant, 'white', nextRules);
       setDaily(null);
     }
 
@@ -492,7 +501,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     setClock(createClock(options.timeControl ?? 'none', Date.now()));
     setScreen('game');
-  }, []);
+  }, [rules]);
 
   const startGame = useCallback(
     (options: StartOptions) => {
@@ -913,6 +922,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       screen,
       kind: activeKind,
       morpionVariant,
+      rules,
       mode,
       board: game.board,
       currentPlayer: game.currentPlayer,
@@ -1014,6 +1024,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       pieceSet,
       playerType,
       requestHint,
+      rules,
       setPieceSet,
       resetGame,
       retryDaily,

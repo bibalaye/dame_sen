@@ -402,3 +402,39 @@
     transition: none;
   }
 }
+
+/* Accès aux règles : l'état se lit sans ouvrir le panneau. */
+.rulesButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-sunk);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.16s ease;
+}
+
+.rulesButton:hover {
+  border-color: var(--brass-ink);
+}
+
+.rulesButton:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.rulesText {
+  flex: 1;
+  text-align: left;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.rulesMore {
+  font-size: 0.76rem;
+  color: var(--text-soft);
+}

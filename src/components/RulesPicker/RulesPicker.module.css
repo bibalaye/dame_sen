@@ -1,0 +1,137 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.intro {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-soft);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rule {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.rule:hover {
+  background: var(--surface-sunk);
+}
+
+.rule:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Une règle active se lit à sa case cochée ; le fond reste calme pour que la
+   liste ne devienne pas un damier. */
+.ruleOn {
+  border-color: var(--line);
+  background: var(--surface-sunk);
+}
+
+.box {
+  flex: none;
+  margin-top: 1px;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+/* Signale les règles qui s'écartent de la coutume, pour qu'on sache ce qu'on a
+   touché sans avoir à comparer ligne à ligne. */
+.tag {
+  padding: 1px 7px;
+  border-radius: 50px;
+  background: var(--brass-ink);
+  color: #fff6e2;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.detail {
+  font-size: 0.76rem;
+  line-height: 1.35;
+  color: var(--text-soft);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.reset {
+  flex: none;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 50px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.reset:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.reset:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.apply {
+  flex: 1;
+  min-height: 56px;
+  font-size: 0.92rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rule {
+    transition: none;
+  }
+}
