@@ -26,7 +26,9 @@ Dans le projet Supabase : **SQL Editor → New query**, coller l'intégralité d
 [`supabase/schema.sql`](../supabase/schema.sql), puis exécuter.
 
 Le script est réexécutable : il ne détruit rien et ignore ce qui existe déjà.
-On peut donc le rejouer après une modification.
+On peut donc le rejouer après une modification — et il **faut** le rejouer
+après chaque mise à jour de ce fichier, sans quoi le serveur garde l'ancienne
+version des fonctions.
 
 Il installe :
 
@@ -131,6 +133,28 @@ plafonné à 1000 étoiles et l'opération refusée au second appel. Rien d'arge
 réel n'étant en jeu, ce garde-fou simple vaut mieux qu'un dispositif compliqué.
 
 ---
+
+### Le schéma est testé, pas seulement écrit
+
+Les règles d'économie vivent maintenant en SQL : c'est le serveur qui accorde
+les étoiles. Un barème qui ne s'exécute nulle part avant la production est un
+pari — et le premier bug trouvé de cette façon (`malformed array literal`,
+invisible à l'analyse syntaxique) n'était pas dans un chemin exotique, mais
+dans la fin de partie ordinaire.
+
+```
+npm run test:sql
+```
+
+37 tests exécutent le schéma dans un vrai PostgreSQL fourni par PGlite, en
+WebAssembly : rien à installer, aucun conteneur à lancer, aucune connexion au
+projet Supabase. Ils exercent chaque chemin des sept fonctions — série de trois
+victoires, prime du septième jour, partie renvoyée deux fois, solde
+insuffisant, seconde reprise refusée — et vérifient qu'aucune politique
+d'écriture n'existe et que le classement ne laisse filtrer ni solde ni
+identifiant.
+
+`npm test` lance les tests unitaires puis ceux-ci.
 
 ## Vérifier que tout marche
 

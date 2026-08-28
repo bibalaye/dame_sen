@@ -217,7 +217,7 @@ begin
 
   v_rewards := array['daily-login'];
   if v_streak % 7 = 0 then
-    v_rewards := v_rewards || 'daily-login-week';
+    v_rewards := array_append(v_rewards, 'daily-login-week');
   end if;
 
   foreach v_reason in array v_rewards loop
@@ -293,7 +293,7 @@ begin
   end if;
 
   if p_result = 'win' then
-    v_rewards := v_rewards || 'win';
+    v_rewards := array_append(v_rewards, 'win');
 
     -- Série en cours : les victoires postérieures au dernier faux pas.
     select coalesce(max(played_at), 0) into v_last_setback
@@ -306,7 +306,7 @@ begin
         and played_at > v_last_setback;
 
     if v_streak > 0 and v_streak % 3 = 0 then
-      v_rewards := v_rewards || 'streak';
+      v_rewards := array_append(v_rewards, 'streak');
     end if;
   end if;
 
@@ -415,7 +415,7 @@ begin
 
   update public.profiles
     set stars = stars - v_price,
-        unlocked = unlocked || p_set_id,
+        unlocked = array_append(unlocked, p_set_id),
         updated_at = now()
     where id = v_uid
     returning * into v_profile;

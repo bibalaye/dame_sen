@@ -106,14 +106,39 @@ const rowToProfile = (row: ProfileRow, games: readonly GameRow[]): PlayerProfile
   pieceSet: asPieceSet(row.piece_set),
 });
 
+/** Formate une erreur PostgREST ou inconnue pour qu'elle ne soit jamais affichée vide ({}) */
+export const formatRemoteError = (error: unknown): string => {
+  if (!error) return 'erreur inconnue';
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) {
+    return error.message || error.stack || String(error);
+  }
+  if (typeof error === 'object') {
+    const err = error as { message?: string; details?: string; hint?: string; code?: string };
+    const parts = [
+      err.message,
+      err.details,
+      err.hint,
+      err.code ? `(code ${err.code})` : '',
+    ].filter(Boolean);
+    if (parts.length > 0) return parts.join(' - ');
+    try {
+      return JSON.stringify(error, Object.getOwnPropertyNames(error));
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+};
+
 /**
  * Traduit une panne du serveur en une phrase compréhensible. Le détail
  * technique part dans la console : utile au développement, illisible pour un
  * joueur.
  */
 const explainDbError = (error: PostgrestError | Error, fallback: string): string => {
-  console.error('[compte]', error);
-  const message = 'message' in error ? error.message : '';
+  console.error('[compte]', formatRemoteError(error), error);
+  const message = 'message' in error && error.message ? error.message : formatRemoteError(error);
 
   if (message.includes('solde insuffisant')) return 'Vous n’avez pas assez d’étoiles.';
   if (message.includes('non debloque')) return 'Ce jeu de pions n’est pas encore à vous.';
@@ -143,7 +168,7 @@ export const loadRemoteState = async (): Promise<RemoteState | null> => {
     .maybeSingle<ProfileRow>();
 
   if (error || !profile) {
-    if (error) console.error('[compte] profil illisible', error);
+    if (error) console.error('[compte] profil illisible', formatRemoteError(error), error);
     return null;
   }
 
@@ -245,7 +270,7 @@ export const claimDailyVisit = async (
 
   const { data, error } = await supabase.rpc('claim_daily_visit');
   if (error) {
-    console.error('[compte] venue du jour', error);
+    console.error('[compte] venue du jour:', formatRemoteError(error), error);
     return null;
   }
   return asRewardOutcome(data, currentStars);
@@ -264,13 +289,13 @@ export const recordGameRemote = async (
     p_game: entry.game,
     p_mode: entry.mode,
     p_result: entry.result,
-    p_opponent: entry.opponent,
+    p_opponent: entry.opponent ?? '',
     p_detail: entry.detail ?? null,
     p_played_at: entry.playedAt,
   });
 
   if (error) {
-    console.error('[compte] partie non enregistrée', error);
+    console.error('[compte] partie non enregistrée:', formatRemoteError(error), error);
     return null;
   }
   return asRewardOutcome(data, currentStars);
@@ -290,7 +315,7 @@ export const recordDailyRemote = async (
   });
 
   if (error) {
-    console.error('[compte] défi non enregistré', error);
+    console.error('[compte] défi non enregistré:', formatRemoteError(error), error);
     return null;
   }
   return asRewardOutcome(data, currentStars);
@@ -322,7 +347,7 @@ export const setPieceSetRemote = async (id: PieceSetId): Promise<void> => {
   if (!supabase) return;
 
   const { error } = await supabase.rpc('set_piece_set', { p_set_id: id });
-  if (error) console.error('[compte] choix de pions non conservé', error);
+  if (error) console.error('[compte] choix de pions non conservé:', formatRemoteError(error), error);
 };
 
 /**
@@ -343,14 +368,14 @@ export const importLocalProgress = async (
       game: entry.game,
       mode: entry.mode,
       result: entry.result,
-      opponent: entry.opponent,
+      opponent: entry.opponent ?? '',
       detail: entry.detail ?? null,
       playedAt: entry.playedAt,
     })),
   });
 
   if (error) {
-    console.error('[compte] reprise impossible', error);
+    console.error('[compte] reprise impossible:', formatRemoteError(error), error);
     return null;
   }
 
@@ -377,7 +402,7 @@ export const fetchLeaderboard = async (): Promise<LeaderboardRow[]> => {
     .limit(50);
 
   if (error) {
-    console.error('[compte] classement indisponible', error);
+    console.error('[compte] classement indisponible:', formatRemoteError(error), error);
     return [];
   }
 
