@@ -176,3 +176,57 @@
     transition: none;
   }
 }
+
+/* Sélecteur de jeu : deux cartes côte à côte, en tête du panneau. */
+.games {
+  display: flex;
+  gap: 8px;
+}
+
+.game {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 14px;
+  text-align: left;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+}
+
+.game:hover {
+  border-color: var(--brass);
+  transform: translateY(-1px);
+}
+
+.game:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.gameActive {
+  border-color: var(--brass);
+  background: color-mix(in srgb, var(--brass) 14%, var(--surface));
+}
+
+.gameName {
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+
+.gameDetail {
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  line-height: 1.3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game {
+    transition: none;
+  }
+}

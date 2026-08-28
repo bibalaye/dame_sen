@@ -1,0 +1,297 @@
+.screen {
+  width: 100%;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+
+.hud {
+  flex: none;
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.hudTitle {
+  text-align: center;
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hudBtn {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+
+.hudBtn:hover {
+  border-color: var(--brass);
+  color: var(--text);
+}
+
+.hudBtn:focus-visible,
+.cell:focus-visible,
+.menuItem:focus-visible,
+.primary:focus-visible,
+.secondary:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.table {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 4px 12px 16px;
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+/* La grille reprend la planche des dames : même matière, même famille. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: min(86vw, 360px);
+  aspect-ratio: 1;
+  padding: 14px;
+  border-radius: 14px;
+  background:
+    repeating-linear-gradient(
+      92deg,
+      rgba(255, 255, 255, 0.035) 0 2px,
+      rgba(0, 0, 0, 0.045) 2px 5px,
+      transparent 5px 13px
+    ),
+    linear-gradient(148deg, var(--wood-light), var(--wood-dark));
+  box-shadow:
+    0 2px 0 rgba(255, 255, 255, 0.12) inset,
+    0 18px 38px -14px rgba(28, 16, 6, 0.65);
+}
+
+.cell {
+  position: relative;
+  border: none;
+  padding: 0;
+  border-radius: 10px;
+  background: var(--square-light);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.2);
+  transition: background-color 0.18s ease, transform 0.18s ease;
+}
+
+.cell:hover:not(:disabled) {
+  background: var(--square-last);
+  transform: translateY(-2px);
+}
+
+.cell:disabled {
+  cursor: default;
+}
+
+/* La dernière case jouée reste marquée, comme le dernier coup aux dames. */
+.last {
+  background: var(--square-last);
+}
+
+.mark {
+  position: absolute;
+  inset: 22%;
+  display: block;
+}
+
+/* Le rond : un cauri posé sur la case. */
+.round .mark {
+  border-radius: 50%;
+  border: 9px solid var(--piece-light);
+  box-shadow:
+    0 2px 5px rgba(20, 12, 4, 0.4),
+    inset 0 1px 2px rgba(0, 0, 0, 0.25);
+  animation: pop 0.24s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+/* La croix : deux traits gravés. */
+.cross .mark::before,
+.cross .mark::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -6%;
+  width: 112%;
+  height: 9px;
+  border-radius: 99px;
+  background: var(--piece-dark);
+  box-shadow: 0 2px 4px rgba(20, 12, 4, 0.45);
+}
+
+.cross .mark::before {
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.cross .mark::after {
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+.cross .mark {
+  animation: pop 0.24s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+/* La ligne gagnante s'allume : le moment qui clôt la partie se voit. */
+.winning {
+  background: var(--brass);
+  animation: flash 0.6s ease-out;
+}
+
+.winning .mark::before,
+.winning .mark::after {
+  background: #2a1c08;
+}
+
+.winning.round .mark {
+  border-color: #fff6e2;
+}
+
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.4); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes flash {
+  0% { box-shadow: 0 0 0 0 rgba(201, 146, 46, 0.9); }
+  100% { box-shadow: 0 0 0 18px rgba(201, 146, 46, 0); }
+}
+
+/* Résultat et menu, dans la modale. */
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: center;
+}
+
+.resultText {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.series {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.primary,
+.secondary {
+  flex: 1;
+  padding: 14px 18px;
+  border-radius: 50px;
+  font-family: inherit;
+  font-size: 0.98rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.16s ease;
+}
+
+.primary {
+  border: none;
+  background: linear-gradient(135deg, var(--green), var(--green-deep));
+  color: #fff;
+}
+
+.secondary {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-soft);
+}
+
+.primary:hover,
+.secondary:hover {
+  transform: translateY(-2px);
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.menuItem {
+  width: 100%;
+  padding: 15px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease;
+}
+
+.menuItem:hover {
+  border-color: var(--brass);
+}
+
+.menuPrimary {
+  background: linear-gradient(135deg, var(--green), var(--green-deep));
+  border-color: transparent;
+  color: #fff;
+}
+
+.menuQuit {
+  color: var(--red);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell,
+  .primary,
+  .secondary,
+  .menuItem {
+    transition: none;
+  }
+
+  .round .mark,
+  .cross .mark,
+  .winning {
+    animation: none;
+  }
+}

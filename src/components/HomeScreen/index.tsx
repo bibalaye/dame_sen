@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useGameContext, type GameMode } from '@/context/GameContext';
+import { useGameContext, type GameKind, type GameMode } from '@/context/GameContext';
 import { TIME_CONTROLS, type TimeControl } from '@/lib/clock';
+import { MORPION_OPPONENTS } from '@/lib/morpion';
 import type { Difficulty } from '@/lib/ai';
 import styles from './HomeScreen.module.css';
 
@@ -17,30 +18,39 @@ export const OPPONENTS: ReadonlyArray<{
   { id: 'expert', name: 'Le vieux', tagline: 'Sous le manguier depuis 40 ans' },
 ];
 
+const GAMES: ReadonlyArray<{ id: GameKind; name: string; detail: string }> = [
+  { id: 'dames', name: 'Dames', detail: 'Plateau 5×5, rafles et dames' },
+  { id: 'morpion', name: 'Morpion', detail: 'Trois marques alignées' },
+];
+
 const MODES: ReadonlyArray<{
   id: GameMode;
   title: string;
   detail: string;
+  /** Modes réservés aux dames : le morpion n'a ni défi ni jeu en ligne. */
+  damesOnly?: boolean;
 }> = [
   {
     id: 'daily',
     title: 'Défi du jour',
     detail: 'Une position, la même pour tous, trois essais',
+    damesOnly: true,
   },
   {
     id: 'solo',
     title: 'Jouer seul',
-    detail: 'Quatre adversaires, du neveu au vieux',
+    detail: 'Contre un adversaire à votre mesure',
   },
   {
     id: 'pass',
     title: 'Autour du plateau',
-    detail: 'À deux sur le même appareil, la planche pivote',
+    detail: 'À deux sur le même appareil',
   },
   {
     id: 'online',
     title: 'À distance',
-    detail: 'Créez une partie et partagez le code',
+    detail: 'Créez une partie et partagez le lien',
+    damesOnly: true,
   },
 ];
 
@@ -48,30 +58,69 @@ const TIME_OPTIONS: readonly TimeControl[] = ['none', 'blitz', 'bullet'];
 
 const HomeScreen: React.FC = () => {
   const { startGame } = useGameContext();
+  const [kind, setKind] = useState<GameKind>('dames');
   const [mode, setMode] = useState<GameMode>('solo');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [timeControl, setTimeControl] = useState<TimeControl>('none');
 
-  const handleStart = () => {
-    startGame({ mode, difficulty, timeControl });
+  const modes = MODES.filter((entry) => kind === 'dames' || !entry.damesOnly);
+
+  // Le morpion propose trois adversaires, les dames quatre.
+  const opponents =
+    kind === 'dames'
+      ? OPPONENTS
+      : MORPION_OPPONENTS.map((entry) => ({
+          id: entry.id as Difficulty,
+          name: entry.name,
+          tagline: entry.tagline,
+        }));
+
+  const handleKind = (next: GameKind) => {
+    setKind(next);
+    // Un mode propre aux dames n'a plus de sens sur la grille de morpion.
+    if (next === 'morpion') {
+      if (mode === 'daily' || mode === 'online') setMode('solo');
+      if (difficulty === 'expert') setDifficulty('hard');
+    }
   };
 
   return (
     <div className={styles.screen}>
       <header className={styles.header}>
-        <p className={styles.eyebrow}>Le jeu traditionnel du Sénégal</p>
-        <h1 className={styles.title}>Dames sénégalaises</h1>
+        <p className={styles.eyebrow}>Jeux de plateau du Sénégal</p>
+        <h1 className={styles.title}>
+          {kind === 'dames' ? 'Dames sénégalaises' : 'Morpion'}
+        </h1>
         <p className={styles.pitch}>
-          Cinq cases sur cinq, tout en lignes droites. La prise est obligatoire,
-          et une rafle bien vue renverse une partie.
+          {kind === 'dames'
+            ? 'Cinq cases sur cinq, tout en lignes droites. La prise est obligatoire, et une rafle bien vue renverse une partie.'
+            : 'Trois marques à aligner. Simple à apprendre — et impossible à battre contre le vieux.'}
         </p>
       </header>
 
       <div className={styles.panel}>
         <fieldset className={styles.group}>
+          <legend className={styles.legend}>Le jeu</legend>
+          <div className={styles.games}>
+            {GAMES.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                className={`${styles.game} ${kind === entry.id ? styles.gameActive : ''}`}
+                onClick={() => handleKind(entry.id)}
+                aria-pressed={kind === entry.id}
+              >
+                <span className={styles.gameName}>{entry.name}</span>
+                <span className={styles.gameDetail}>{entry.detail}</span>
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className={styles.group}>
           <legend className={styles.legend}>Comment jouer</legend>
           <div className={styles.modes}>
-            {MODES.map((entry) => (
+            {modes.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
@@ -90,7 +139,7 @@ const HomeScreen: React.FC = () => {
           <fieldset className={styles.group}>
             <legend className={styles.legend}>Contre qui</legend>
             <div className={styles.chips}>
-              {OPPONENTS.map((entry) => (
+              {opponents.map((entry) => (
                 <button
                   key={entry.id}
                   type="button"
@@ -108,29 +157,33 @@ const HomeScreen: React.FC = () => {
           </fieldset>
         )}
 
-        {mode !== 'daily' && (
-        <fieldset className={styles.group}>
-          <legend className={styles.legend}>Rythme</legend>
-          <div className={styles.chips}>
-            {TIME_OPTIONS.map((id) => (
-              <button
-                key={id}
-                type="button"
-                className={`${styles.chip} ${
-                  timeControl === id ? styles.chipActive : ''
-                }`}
-                onClick={() => setTimeControl(id)}
-                aria-pressed={timeControl === id}
-              >
-                <span className={styles.chipName}>{TIME_CONTROLS[id].label}</span>
-                <span className={styles.chipTag}>{TIME_CONTROLS[id].description}</span>
-              </button>
-            ))}
-          </div>
-        </fieldset>
+        {kind === 'dames' && mode !== 'daily' && (
+          <fieldset className={styles.group}>
+            <legend className={styles.legend}>Rythme</legend>
+            <div className={styles.chips}>
+              {TIME_OPTIONS.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`${styles.chip} ${
+                    timeControl === id ? styles.chipActive : ''
+                  }`}
+                  onClick={() => setTimeControl(id)}
+                  aria-pressed={timeControl === id}
+                >
+                  <span className={styles.chipName}>{TIME_CONTROLS[id].label}</span>
+                  <span className={styles.chipTag}>{TIME_CONTROLS[id].description}</span>
+                </button>
+              ))}
+            </div>
+          </fieldset>
         )}
 
-        <button type="button" className={styles.play} onClick={handleStart}>
+        <button
+          type="button"
+          className={styles.play}
+          onClick={() => startGame({ kind, mode, difficulty, timeControl })}
+        >
           {mode === 'online'
             ? 'Créer ou rejoindre'
             : mode === 'daily'

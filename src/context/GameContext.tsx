@@ -71,6 +71,9 @@ export type Screen = 'home' | 'game';
  */
 export type GameMode = 'solo' | 'pass' | 'online' | 'daily';
 
+/** Les jeux proposés. Chacun a son propre plateau et ses propres règles. */
+export type GameKind = 'dames' | 'morpion';
+
 /** Suivi de la partie quotidienne : essais consommés et résultat. */
 export interface DailyState {
   readonly puzzle: DailyPuzzle;
@@ -81,6 +84,7 @@ export interface DailyState {
 }
 
 export interface StartOptions {
+  readonly kind?: GameKind;
   readonly mode: GameMode;
   readonly difficulty?: Difficulty;
   readonly timeControl?: TimeControl;
@@ -89,6 +93,7 @@ export interface StartOptions {
 
 interface GameContextType {
   screen: Screen;
+  kind: GameKind;
   mode: GameMode;
   board: Board;
   currentPlayer: Player;
@@ -245,6 +250,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   } = useSocketContext();
 
   const [screen, setScreen] = useState<Screen>('home');
+  const [kind, setKind] = useState<GameKind>('dames');
   const [mode, setMode] = useState<GameMode>('solo');
   const [variant, setVariant] = useState<Variant>('classic');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
@@ -336,6 +342,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // --- Démarrage et arrêt -------------------------------------------------
 
   const beginGame = useCallback((options: StartOptions) => {
+    setKind(options.kind ?? 'dames');
     const nextVariant = options.variant ?? 'classic';
 
     // Le défi du jour ne part pas d'une position de départ mais du puzzle du
@@ -744,6 +751,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const value = useMemo<GameContextType>(
     () => ({
       screen,
+      kind,
       mode,
       board: game.board,
       currentPlayer: game.currentPlayer,
@@ -796,6 +804,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     [
       alert,
       bestChain,
+      kind,
       blackPieces,
       clock,
       createRoom,
