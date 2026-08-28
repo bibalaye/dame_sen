@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Modal from '../Modal';
+import MultiplayerMenu from '../MultiplayerMenu';
 import PlayerBar from '../PlayerBar';
 import Toast from '../Toast';
 import { useGameContext, type GameMode } from '@/context/GameContext';
@@ -27,12 +28,35 @@ const HUMAN: Mark = 'X';
 const AI: Mark = 'O';
 
 interface MorpionProps {
-  mode: Extract<GameMode, 'solo' | 'pass'>;
+  mode: Extract<GameMode, 'solo' | 'pass' | 'online'>;
   difficulty: MorpionDifficulty;
 }
 
+/**
+ * Le serveur ne connaît que « blanc » et « noir » : il attribue le premier au
+ * créateur de la salle. On fait donc jouer les croix au blanc, les ronds au
+ * noir, et la même salle sert indifféremment aux dames et au morpion.
+ */
+const markOf = (side: 'white' | 'black' | null): Mark => (side === 'black' ? 'O' : 'X');
+const sideOf = (mark: Mark): 'white' | 'black' => (mark === 'X' ? 'white' : 'black');
+
 const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
-  const { goHome, muted, toggleMute } = useGameContext();
+  const {
+    goHome,
+    muted,
+    toggleMute,
+    socket,
+    playerType,
+    roomId,
+    opponent,
+    isWaitingForOpponent,
+    isGameStarted,
+    makeMove: sendMove,
+  } = useGameContext();
+
+  const online = mode === 'online';
+  /** La marque que ce joueur contrôle : croix pour l'hôte, ronds pour l'invité. */
+  const myMark = online ? markOf(playerType) : HUMAN;
 
   const [state, setState] = useState<MorpionState>(() => createMorpion());
   const [selected, setSelected] = useState<number | null>(null);
@@ -56,19 +80,57 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
     setIsThinking(false);
   }, []);
 
-  const commit = useCallback((move: MorpionMove) => {
-    const next = playMorpion(stateRef.current, move);
-    if (next === stateRef.current) return;
+  const commit = useCallback(
+    (move: MorpionMove, byPlayer = true) => {
+      const next = playMorpion(stateRef.current, move);
+      if (next === stateRef.current) return;
 
-    stateRef.current = next;
-    setState(next);
-    setSelected(null);
-    play('move');
-    vibrate(10);
-  }, []);
+      stateRef.current = next;
+      setState(next);
+      setSelected(null);
+      play('move');
+      vibrate(10);
 
-  // Le tour de l'adversaire, avec un temps de réflexion : répondre au quart de
-  // seconde donne l'impression d'un mur, pas d'un joueur.
+      // En ligne, on transmet le coup et à qui revient le trait ensuite.
+      if (byPlayer && online) {
+        sendMove(move, sideOf(next.current));
+      }
+    },
+    [online, sendMove],
+  );
+
+  // Le coup de l'adversaire distant passe par le moteur : un coup illégal est
+  // signalé et ignoré, jamais appliqué tel quel.
+  useEffect(() => {
+    if (!online || !socket) return;
+
+    const handleOpponentMove = ({ move }: { move: MorpionMove }) => {
+      const next = playMorpion(stateRef.current, move);
+      if (next === stateRef.current) {
+        console.warn('Coup adverse refusé par le moteur', move);
+        return;
+      }
+      stateRef.current = next;
+      setState(next);
+      setSelected(null);
+      play('move');
+    };
+
+    socket.on('opponent-move', handleOpponentMove);
+    return () => {
+      socket.off('opponent-move', handleOpponentMove);
+    };
+  }, [online, socket]);
+
+  // Les deux joueurs sont là : on repart d'une grille vide, de part et d'autre.
+  useEffect(() => {
+    if (online && isGameStarted) reset();
+    // `reset` est stable ; le relancer à chaque rendu couperait la partie.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online, isGameStarted]);
+
+  // Le tour de l'adversaire artificiel, avec un temps de réflexion : répondre au
+  // quart de seconde donne l'impression d'un mur, pas d'un joueur.
   useEffect(() => {
     if (mode !== 'solo' || finished || state.current !== AI) return;
 
@@ -76,7 +138,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
     const timer = setTimeout(() => {
       const move = findBestMorpionMove(stateRef.current, difficulty);
       setIsThinking(false);
-      if (move) commit(move);
+      if (move) commit(move, false);
     }, morpionThinkingDelay());
 
     return () => {
@@ -93,10 +155,13 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
 
     const { winner } = state.status;
     setSeries((current) => ({ ...current, [winner]: current[winner] + 1 }));
-    play(mode === 'pass' || winner === HUMAN ? 'win' : 'lose');
-  }, [state, mode]);
+    play(mode === 'pass' || winner === (online ? myMark : HUMAN) ? 'win' : 'lose');
+  }, [state, mode, online, myMark]);
 
-  const canAct = !finished && (mode === 'pass' || state.current === HUMAN);
+  const canAct =
+    !finished &&
+    (mode === 'pass' ||
+      (online ? state.current === myMark && !!opponent : state.current === HUMAN));
   const moves = canAct ? availableMoves(state) : [];
 
   /** Cases où le pion sélectionné peut se rendre : toutes les cases libres. */
@@ -142,7 +207,11 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
   const names =
     mode === 'solo'
       ? { X: 'Vous', O: character?.name ?? 'Ordinateur' }
-      : { X: 'Croix', O: 'Ronds' };
+      : online
+        ? myMark === 'X'
+          ? { X: 'Vous', O: opponent ?? 'Adversaire' }
+          : { X: opponent ?? 'Adversaire', O: 'Vous' }
+        : { X: 'Croix', O: 'Ronds' };
 
   const placedTotal = state.placed.X + state.placed.O;
   const alert = !finished
@@ -164,7 +233,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
       : state.status.kind === 'win'
         ? mode === 'pass'
           ? `Les ${state.status.winner === 'X' ? 'croix' : 'ronds'} gagnent`
-          : state.status.winner === HUMAN
+          : state.status.winner === (online ? myMark : HUMAN)
             ? 'Vous gagnez !'
             : 'Partie perdue'
         : '';
@@ -177,7 +246,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
       : state.status.kind === 'win'
         ? mode === 'pass'
           ? 'Passez l’appareil pour la revanche.'
-          : state.status.winner === HUMAN
+          : state.status.winner === (online ? myMark : HUMAN)
             ? 'Bien joué.'
             : 'Votre adversaire aligne le premier.'
         : '';
@@ -194,7 +263,12 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
           ←
         </button>
         <span className={styles.hudTitle}>
-          Morpion · {mode === 'pass' ? 'à deux' : (character?.name ?? '')}
+          Morpion ·{' '}
+          {mode === 'pass'
+            ? 'à deux'
+            : online
+              ? 'en ligne'
+              : (character?.name ?? '')}
         </span>
         <button
           type="button"
@@ -267,11 +341,13 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
           side="white"
           name={names.X}
           subtitle={
-            isMoving
+            canAct && isMoving
               ? selected !== null
                 ? 'posez-le sur une case libre'
                 : 'prenez un pion'
-              : 'les croix'
+              : online && !canAct && !finished
+                ? 'au tour de l’adversaire'
+                : 'les croix'
           }
           pieces={PIECES_PER_PLAYER - state.placed.X}
           total={PIECES_PER_PLAYER}
@@ -279,6 +355,12 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
           clock={clock}
         />
       </main>
+
+      {online && (!roomId || isWaitingForOpponent) && (
+        <Modal title="Jouer à distance" dismissible={false} onClose={() => undefined}>
+          <MultiplayerMenu />
+        </Modal>
+      )}
 
       {finished && (
         <Modal variant="center" dismissible={false} title={heading} onClose={() => undefined}>
@@ -292,9 +374,11 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
             )}
 
             <div className={styles.actions}>
-              <button type="button" className={styles.primary} onClick={reset}>
-                Revanche
-              </button>
+              {!online && (
+                <button type="button" className={styles.primary} onClick={reset}>
+                  Revanche
+                </button>
+              )}
               <button type="button" className={styles.secondary} onClick={goHome}>
                 Accueil
               </button>
@@ -306,16 +390,18 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
       {menuOpen && (
         <Modal title="Partie" onClose={() => setMenuOpen(false)}>
           <div className={styles.menu}>
-            <button
-              type="button"
-              className={`${styles.menuItem} ${styles.menuPrimary}`}
-              onClick={() => {
-                reset();
-                setMenuOpen(false);
-              }}
-            >
-              Nouvelle partie
-            </button>
+            {!online && (
+              <button
+                type="button"
+                className={`${styles.menuItem} ${styles.menuPrimary}`}
+                onClick={() => {
+                  reset();
+                  setMenuOpen(false);
+                }}
+              >
+                Nouvelle partie
+              </button>
+            )}
             <button type="button" className={styles.menuItem} onClick={toggleMute}>
               {muted ? 'Activer le son' : 'Couper le son'}
             </button>

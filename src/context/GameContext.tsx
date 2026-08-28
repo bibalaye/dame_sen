@@ -57,7 +57,8 @@ import {
   saveProgress,
   type DailyPuzzle,
 } from '@/lib/daily';
-import { useSocketContext } from './SocketContext';
+import { useSocketContext, type NetworkMove } from './SocketContext';
+import type { Socket } from 'socket.io-client';
 
 const AI_PLAYER: Player = 'black';
 const MAX_HINTS = 3;
@@ -133,6 +134,10 @@ interface GameContextType {
   playerType: Player | null;
   opponent: string | null;
   isWaitingForOpponent: boolean;
+  isGameStarted: boolean;
+  /** Accès direct au canal, pour les jeux qui gèrent eux-mêmes leurs échanges. */
+  socket: Socket | null;
+  makeMove: (move: NetworkMove, nextPlayer: Player) => void;
   /** Vrai tant que la liaison avec le serveur de jeu n'est pas établie. */
   isConnecting: boolean;
   /** Message d'erreur du serveur de jeu, à afficher au joueur. */
@@ -655,7 +660,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [opponent]);
 
   useEffect(() => {
-    if (isMultiplayer && isGameStarted) {
+    if (isMultiplayer && isGameStarted && kind === 'dames') {
       beginGame({ mode: 'online', timeControl: clock.control, variant });
     }
     // `clock.control` et `variant` sont lus au démarrage, sans relancer l'effet.
@@ -663,7 +668,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [isGameStarted, isMultiplayer, beginGame]);
 
   useEffect(() => {
-    if (!socket || !isMultiplayer) return;
+    // Le morpion en ligne gère ses propres échanges : ce moteur-ci ne doit pas
+    // tenter d'appliquer un coup qui ne lui est pas destiné.
+    if (!socket || !isMultiplayer || kind !== 'dames') return;
 
     const handleOpponentMove = ({ move }: { move: Move }) => {
       const current = gameRef.current;
@@ -687,14 +694,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => {
       socket.off('opponent-move', handleOpponentMove);
     };
-  }, [socket, isMultiplayer]);
+  }, [socket, isMultiplayer, kind]);
 
   useEffect(() => {
-    if (!isMultiplayer || !winner) return;
+    if (!isMultiplayer || !winner || kind !== 'dames') return;
     if (reportedWinner.current === winner) return;
     reportedWinner.current = winner;
     notifyGameOver(winner);
-  }, [isMultiplayer, winner, notifyGameOver]);
+  }, [isMultiplayer, winner, notifyGameOver, kind]);
 
   // --- Interaction --------------------------------------------------------
 
@@ -823,6 +830,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       playerType,
       opponent,
       isWaitingForOpponent,
+      isGameStarted,
+      socket,
+      makeMove: socketMakeMove,
       isConnecting: isMultiplayer && !isConnected,
       connectionError: socketError,
       bestChain,
@@ -860,7 +870,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isFlipped,
       invitedRoom,
       isConnected,
+      isGameStarted,
       isMultiplayer,
+      socket,
+      socketMakeMove,
       isThinking,
       socketError,
       isWaitingForOpponent,

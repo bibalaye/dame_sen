@@ -27,7 +27,7 @@ const MODES: ReadonlyArray<{
   id: GameMode;
   title: string;
   detail: string;
-  /** Modes réservés aux dames : le morpion n'a ni défi ni jeu en ligne. */
+  /** Le défi du jour repose sur une position de dames : lui seul est réservé. */
   damesOnly?: boolean;
 }> = [
   {
@@ -50,7 +50,6 @@ const MODES: ReadonlyArray<{
     id: 'online',
     title: 'À distance',
     detail: 'Créez une partie et partagez le lien',
-    damesOnly: true,
   },
 ];
 
@@ -77,9 +76,9 @@ const HomeScreen: React.FC = () => {
 
   const handleKind = (next: GameKind) => {
     setKind(next);
-    // Un mode propre aux dames n'a plus de sens sur la grille de morpion.
     if (next === 'morpion') {
-      if (mode === 'daily' || mode === 'online') setMode('solo');
+      // Le défi du jour repose sur une position de dames.
+      if (mode === 'daily') setMode('solo');
       if (difficulty === 'expert') setDifficulty('hard');
     }
   };

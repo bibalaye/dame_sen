@@ -22,8 +22,8 @@ export default function Page() {
   }
 
   if (kind === 'morpion') {
-    // Le morpion ne connaît ni le jeu en ligne ni le défi du jour.
-    const localMode = mode === 'pass' ? 'pass' : 'solo';
+    // Le morpion connaît tous les modes sauf le défi du jour.
+    const localMode = mode === 'daily' ? 'solo' : mode;
     // Les niveaux des dames comptent quatre paliers, le morpion trois.
     const level: MorpionDifficulty =
       difficulty === 'easy' ? 'easy' : difficulty === 'medium' ? 'medium' : 'hard';

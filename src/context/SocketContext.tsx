@@ -2,7 +2,14 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
-import type { Board, Move, Player } from '@/lib/engine';
+import type { Board, Move as DamesMove, Player } from '@/lib/engine';
+import type { MorpionMove } from '@/lib/morpion';
+
+/**
+ * Un coup transmis sur le réseau. Le serveur ne fait que relayer : il n'a pas
+ * à connaître les règles, et la même salle sert donc aux deux jeux.
+ */
+export type NetworkMove = DamesMove | MorpionMove;
 
 /** Port sur lequel `npm run server` expose le serveur temps réel. */
 const REALTIME_PORT = '5000';
@@ -44,7 +51,7 @@ interface SocketContextType {
   error: string | null;
   createRoom: (username: string) => void;
   joinRoom: (roomId: string, username: string) => void;
-  makeMove: (move: Move, nextPlayer: Player) => void;
+  makeMove: (move: NetworkMove, nextPlayer: Player) => void;
   syncGameState: (board: Board, currentPlayer: Player) => void;
   notifyGameOver: (winner: Player) => void;
   setMultiplayerMode: (isMultiplayer: boolean) => void;
@@ -225,7 +232,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
    * Sans cette précision le serveur alternait systématiquement les joueurs et
    * rejetait le deuxième coup d'une rafle, ce qui désynchronisait la partie.
    */
-  const makeMove = (move: Move, nextPlayer: Player) => {
+  const makeMove = (move: NetworkMove, nextPlayer: Player) => {
     if (socket && roomId) {
       socket.emit('make-move', { roomId, move, nextPlayer });
     }
