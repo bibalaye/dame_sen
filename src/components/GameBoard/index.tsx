@@ -9,7 +9,7 @@ import Modal from '../Modal';
 import MultiplayerMenu from '../MultiplayerMenu';
 import PlayerBar from '../PlayerBar';
 import RulesPanel from '../RulesPanel';
-import PieceSetPicker from '../PieceSetPicker';
+import Shop from '../Shop';
 import Toast from '../Toast';
 import { OPPONENTS } from '../HomeScreen';
 import { useGameContext } from '@/context/GameContext';
@@ -43,6 +43,8 @@ const GameBoard = () => {
     series,
     bestChain,
     requestHint,
+    canUndo,
+    undoMove,
     resetGame,
     goHome,
     toggleMute,
@@ -144,16 +146,27 @@ const GameBoard = () => {
           clock={clock}
         />
 
-        {/* Une seule action reste à portée de pouce pendant la partie. */}
+        {/* Les actions restent à portée de pouce pendant la partie, et se
+            limitent au solo : rien de tout cela ne s'offre contre un humain. */}
         {mode === 'solo' && !gameOver && (
-          <button
-            type="button"
-            className={styles.hint}
-            onClick={requestHint}
-            disabled={hintsLeft === 0 || currentPlayer !== 'white'}
-          >
-            Un conseil ?<span className={styles.hintCount}>{hintsLeft}</span>
-          </button>
+          <div className={styles.soloActions}>
+            <button
+              type="button"
+              className={styles.hint}
+              onClick={requestHint}
+              disabled={hintsLeft === 0 || currentPlayer !== 'white'}
+            >
+              Un conseil ?<span className={styles.hintCount}>{hintsLeft}</span>
+            </button>
+
+            {/* Le bouton n'apparaît qu'une fois la fonction acquise : proposer
+                une action verrouillée à chaque partie serait une réclame. */}
+            {canUndo && (
+              <button type="button" className={styles.hint} onClick={undoMove}>
+                Reprendre
+              </button>
+            )}
+          </div>
         )}
       </main>
 
@@ -216,7 +229,7 @@ const GameBoard = () => {
       )}
 
       {sheet === 'rules' && <RulesPanel onClose={() => setSheet(null)} />}
-      {sheet === 'pieces' && <PieceSetPicker onClose={() => setSheet(null)} />}
+      {sheet === 'pieces' && <Shop onClose={() => setSheet(null)} />}
 
       {opponentLeft && (
         <Modal

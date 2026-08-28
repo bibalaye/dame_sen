@@ -1,27 +1,48 @@
 /**
  * Jeux de pions.
  *
- * Les pièces étaient dessinées en CSS : deux dégradés radiaux et un anneau. On
- * passe à de vraies images, et le joueur choisit avec quoi il joue — c'est la
- * personnalisation la moins coûteuse et la plus visible d'un jeu de plateau.
- *
  * Un jeu de pions fournit deux visuels opposés : le camp clair et le camp
  * sombre aux dames, les croix et les ronds au morpion. Le choix vaut pour les
  * deux jeux, et se conserve d'une session à l'autre.
+ *
+ * Les six premiers jeux ne différaient que par la couleur : six disques, six
+ * fois la même silhouette. On ne choisissait pas une pièce, on choisissait une
+ * teinte — et rien ne donnait envie d'en viser une autre. Chaque jeu repose
+ * désormais sur une forme qui lui est propre, reconnaissable à la taille où le
+ * plateau l'affiche.
+ *
+ * La rareté n'est pas décorative : elle dit d'un coup d'œil ce qui est à portée
+ * et ce qui se mérite, ce qu'un prix seul ne fait pas.
  */
 
+import type { Rarity } from './rarity.ts';
+
 export type PieceSetId =
+  // Les six premiers gardent leur identifiant : des joueurs les possèdent déjà,
+  // et le renommer effacerait ce qu'ils ont acquis.
   | 'cauri'
   | 'sabar'
   | 'teranga'
   | 'baobab'
   | 'donjon'
-  | 'jetons';
+  | 'jetons'
+  | 'sable'
+  | 'village'
+  | 'quilles'
+  | 'pirogue'
+  | 'lutte'
+  | 'goree'
+  | 'ter'
+  | 'drapeaux'
+  | 'casino'
+  | 'envol';
 
 export interface PieceSet {
   readonly id: PieceSetId;
   readonly name: string;
   readonly detail: string;
+  readonly rarity: Rarity;
+  readonly price: number;
   /** Image du camp qui ouvre la partie : blancs aux dames, croix au morpion. */
   readonly light: string;
   /** Image du camp adverse. */
@@ -31,63 +52,63 @@ export interface PieceSet {
   readonly darkKing: string;
 }
 
-const PIECE_DIR = '/assets/pieces';
+const DIR = '/assets/pieces';
+
+/** Décrit un jeu à partir d'une forme et de deux couleurs opposées. */
+const jeu = (
+  id: PieceSetId,
+  name: string,
+  detail: string,
+  rarity: Rarity,
+  price: number,
+  forme: string,
+  clair: string,
+  sombre: string,
+): PieceSet => ({
+  id,
+  name,
+  detail,
+  rarity,
+  price,
+  light: `${DIR}/${forme}-${clair}.png`,
+  dark: `${DIR}/${forme}-${sombre}.png`,
+  lightKing: `${DIR}/${forme}-${clair}-king.png`,
+  darkKing: `${DIR}/${forme}-${sombre}-king.png`,
+});
 
 export const PIECE_SETS: readonly PieceSet[] = [
-  {
-    id: 'cauri',
-    name: 'Cauris',
-    detail: 'Le jeu traditionnel, clair contre sombre',
-    light: `${PIECE_DIR}/disc-white.png`,
-    dark: `${PIECE_DIR}/disc-black.png`,
-    lightKing: `${PIECE_DIR}/disc-white-king.png`,
-    darkKing: `${PIECE_DIR}/disc-black-king.png`,
-  },
-  {
-    id: 'sabar',
-    name: 'Sabar',
-    detail: 'Rouge et bleu, comme les tambours',
-    light: `${PIECE_DIR}/disc-red.png`,
-    dark: `${PIECE_DIR}/disc-blue.png`,
-    lightKing: `${PIECE_DIR}/disc-red-king.png`,
-    darkKing: `${PIECE_DIR}/disc-blue-king.png`,
-  },
-  {
-    id: 'teranga',
-    name: 'Teranga',
-    detail: 'Vert et jaune',
-    light: `${PIECE_DIR}/disc-yellow.png`,
-    dark: `${PIECE_DIR}/disc-green.png`,
-    lightKing: `${PIECE_DIR}/disc-yellow-king.png`,
-    darkKing: `${PIECE_DIR}/disc-green-king.png`,
-  },
-  {
-    id: 'baobab',
-    name: 'Baobab',
-    detail: 'Des pions taillés, blanc contre violet',
-    light: `${PIECE_DIR}/pawn-white.png`,
-    dark: `${PIECE_DIR}/pawn-purple.png`,
-    lightKing: `${PIECE_DIR}/pawn-white-king.png`,
-    darkKing: `${PIECE_DIR}/pawn-purple-king.png`,
-  },
-  {
-    id: 'donjon',
-    name: 'Donjon',
-    detail: 'Des tours de château',
-    light: `${PIECE_DIR}/tower-white.png`,
-    dark: `${PIECE_DIR}/tower-black.png`,
-    lightKing: `${PIECE_DIR}/tower-white-king.png`,
-    darkKing: `${PIECE_DIR}/tower-black-king.png`,
-  },
-  {
-    id: 'jetons',
-    name: 'Jetons',
-    detail: 'Des jetons de table',
-    light: `${PIECE_DIR}/chip-redwhite.png`,
-    dark: `${PIECE_DIR}/chip-blackwhite.png`,
-    lightKing: `${PIECE_DIR}/chip-redwhite-king.png`,
-    darkKing: `${PIECE_DIR}/chip-blackwhite-king.png`,
-  },
+  // --- Commun : de quoi jouer tout de suite -------------------------------
+  jeu(
+    'cauri',
+    'Classique',
+    'Le damier de toujours, clair contre sombre',
+    'commun',
+    0,
+    'disc',
+    'white',
+    'black',
+  ),
+  jeu('sabar', 'Sabar', 'Rouge et bleu, comme les tambours', 'commun', 150, 'disc', 'red', 'blue'),
+  jeu('teranga', 'Teranga', 'Le vert et le jaune du pays', 'commun', 250, 'disc', 'yellow', 'green'),
+  jeu('sable', 'Sable', 'Des pions taillés, sobres', 'commun', 250, 'pawn', 'white', 'black'),
+
+  // --- Rare : la première vraie récompense ---------------------------------
+  jeu('baobab', 'Baobab', 'Blanc contre violet, massif', 'rare', 500, 'pawn', 'white', 'purple'),
+  jeu('jetons', 'Jetons', 'Des jetons de table', 'rare', 500, 'chip', 'redwhite', 'blackwhite'),
+  jeu('village', 'Village', 'Des cases au toit pointu', 'rare', 700, 'case', 'yellow', 'green'),
+  jeu('quilles', 'Quilles', 'Des silhouettes debout', 'rare', 700, 'quille', 'white', 'black'),
+  jeu('donjon', 'Donjon', 'Des tours de château', 'rare', 900, 'tower', 'white', 'black'),
+
+  // --- Épique : on les remarque de l'autre bout de la table ----------------
+  jeu('pirogue', 'Pirogues', 'Les barques des pêcheurs', 'epique', 1400, 'pirogue', 'blue', 'red'),
+  jeu('lutte', 'Lutteurs', 'L’arène, bras écartés', 'epique', 1400, 'lutteur', 'red', 'blue'),
+  jeu('goree', 'Gorée', 'Les tours crénelées de l’île', 'epique', 1800, 'fort', 'white', 'black'),
+  jeu('casino', 'Tapis vert', 'Jetons verts contre bleus', 'epique', 1800, 'chip', 'greenwhite', 'bluewhite'),
+
+  // --- Légendaire : le but qu'on se fixe -----------------------------------
+  jeu('ter', 'Le TER', 'Deux trains qui se croisent', 'legendaire', 3000, 'train', 'blue', 'red'),
+  jeu('drapeaux', 'Fanions', 'Planter son drapeau', 'legendaire', 3000, 'fanion', 'green', 'yellow'),
+  jeu('envol', 'Envol', 'Deux appareils en vol', 'legendaire', 4000, 'avion', 'white', 'red'),
 ];
 
 export const DEFAULT_PIECE_SET: PieceSetId = 'cauri';

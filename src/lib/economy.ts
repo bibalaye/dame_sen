@@ -1,17 +1,24 @@
 /**
- * Économie du jeu : les étoiles gagnées en jouant.
+ * Économie du jeu : les cauris gagnés en jouant.
  *
- * Une seule monnaie, gagnée uniquement en jouant, et dépensée pour débloquer
- * des éléments décoratifs. Rien ici ne touche à l'argent réel : ni achat, ni
- * publicité, ni retrait. Cette couche a du sens quelle que soit la suite —
- * elle donne une raison de revenir et rend les pions désirables — et elle ne
- * dépend d'aucune décision commerciale.
+ * Le cauri est le coquillage qui a servi de monnaie en Afrique de l'Ouest
+ * pendant des siècles. C'est de l'argent, pas un score — et c'est ce qu'il faut
+ * pour qu'une boutique ait du sens. Le mot ne demande aucune explication ici.
  *
- * Les gains ne portent que sur le décor : rien de ce qui s'achète ici ne change
- * une règle ni ne donne un avantage en partie.
+ * Une seule monnaie, gagnée uniquement en jouant, dépensée pour du décor et
+ * pour deux commodités de jeu solo. Rien ici ne touche à l'argent réel : ni
+ * achat, ni publicité, ni retrait.
+ *
+ * Les gains ne portent jamais sur un avantage en partie contre un humain : rien
+ * de ce qui s'achète ne change une règle.
  */
 
-import { PIECE_SETS, type PieceSetId } from './pieceSets.ts';
+import {
+  FREE_ITEMS,
+  keepKnownItems,
+  priceOfItem,
+  type ItemId,
+} from './shop.ts';
 
 export type RewardReason =
   | 'played'
@@ -21,7 +28,12 @@ export type RewardReason =
   | 'daily-login'
   | 'daily-login-week';
 
-/** Barème des gains, en étoiles. */
+/**
+ * Barème des gains, en cauris.
+ *
+ * Ce barème est écrit deux fois : ici et dans supabase/schema.sql. Le client
+ * l'affiche, le serveur en décide. Un test compare les deux à chaque exécution.
+ */
 export const REWARDS: Readonly<Record<RewardReason, number>> = {
   played: 10,
   win: 25,
@@ -40,24 +52,12 @@ export const REWARD_LABELS: Readonly<Record<RewardReason, string>> = {
   'daily-login-week': 'Sept jours d’affilée',
 };
 
-/**
- * Prix des jeux de pions. Le premier est offert : on ne démarre jamais sans
- * pièces, et le second est à portée de quelques parties.
- */
-export const PIECE_SET_PRICES: Readonly<Record<PieceSetId, number>> = {
-  cauri: 0,
-  sabar: 300,
-  teranga: 600,
-  baobab: 1000,
-  donjon: 1500,
-  jetons: 2000,
-};
-
 export interface Wallet {
-  readonly stars: number;
+  readonly coins: number;
   /** Total gagné depuis le début, pour l'affichage des statistiques. */
   readonly earned: number;
-  readonly unlocked: readonly PieceSetId[];
+  /** Articles possédés, toutes familles confondues. */
+  readonly owned: readonly ItemId[];
   /** Numéro du dernier jour où la venue a été récompensée. */
   readonly lastVisitDay: number;
   /** Jours de venue consécutifs, pour le palier hebdomadaire. */
@@ -65,37 +65,36 @@ export interface Wallet {
 }
 
 export const EMPTY_WALLET: Wallet = {
-  stars: 0,
+  coins: 0,
   earned: 0,
-  unlocked: ['cauri'],
+  owned: FREE_ITEMS,
   lastVisitDay: 0,
   visitStreak: 0,
 };
 
-export const isUnlocked = (wallet: Wallet, id: PieceSetId): boolean =>
-  PIECE_SET_PRICES[id] === 0 || wallet.unlocked.includes(id);
+/** Vrai si l'article est acquis — ou offert, ce qui revient au même. */
+export const owns = (wallet: Wallet, id: ItemId): boolean =>
+  priceOfItem(id) === 0 || wallet.owned.includes(id);
 
-export const priceOf = (id: PieceSetId): number => PIECE_SET_PRICES[id] ?? 0;
-
-export const canAfford = (wallet: Wallet, id: PieceSetId): boolean =>
-  !isUnlocked(wallet, id) && wallet.stars >= priceOf(id);
+export const canAfford = (wallet: Wallet, id: ItemId): boolean =>
+  !owns(wallet, id) && wallet.coins >= priceOfItem(id);
 
 /** Crédite un gain. Le total gagné ne baisse jamais, même après un achat. */
 export const credit = (wallet: Wallet, reason: RewardReason): Wallet => {
   const amount = REWARDS[reason];
-  return { ...wallet, stars: wallet.stars + amount, earned: wallet.earned + amount };
+  return { ...wallet, coins: wallet.coins + amount, earned: wallet.earned + amount };
 };
 
 /**
- * Débloque un jeu de pions. Refuse si le solde ne suffit pas ou s'il est déjà
- * acquis : on ne débite jamais deux fois la même chose.
+ * Achète un article. Refuse si le solde ne suffit pas ou s'il est déjà acquis :
+ * on ne débite jamais deux fois la même chose.
  */
-export const unlock = (wallet: Wallet, id: PieceSetId): Wallet => {
-  if (isUnlocked(wallet, id)) return wallet;
-  const price = priceOf(id);
-  if (wallet.stars < price) return wallet;
+export const buy = (wallet: Wallet, id: ItemId): Wallet => {
+  if (owns(wallet, id)) return wallet;
+  const price = priceOfItem(id);
+  if (wallet.coins < price) return wallet;
 
-  return { ...wallet, stars: wallet.stars - price, unlocked: [...wallet.unlocked, id] };
+  return { ...wallet, coins: wallet.coins - price, owned: [...wallet.owned, id] };
 };
 
 export interface VisitOutcome {
@@ -144,19 +143,6 @@ export const gameRewards = (
 export const totalOf = (rewards: readonly RewardReason[]): number =>
   rewards.reduce((sum, reason) => sum + REWARDS[reason], 0);
 
-/** Ce qu'il reste à gagner pour s'offrir le prochain jeu de pions. */
-export const nextGoal = (
-  wallet: Wallet,
-): { id: PieceSetId; missing: number } | null => {
-  const locked = PIECE_SETS.filter((set) => !isUnlocked(wallet, set.id)).sort(
-    (a, b) => priceOf(a.id) - priceOf(b.id),
-  );
-  if (locked.length === 0) return null;
-
-  const next = locked[0];
-  return { id: next.id, missing: Math.max(0, priceOf(next.id) - wallet.stars) };
-};
-
 // --- Conservation locale ----------------------------------------------------
 
 const STORAGE_KEY = 'dame-sen:wallet';
@@ -167,16 +153,21 @@ export const loadWallet = (): Wallet => {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return EMPTY_WALLET;
 
-    const parsed = JSON.parse(raw) as Partial<Wallet>;
-    const known = new Set(PIECE_SETS.map((set) => set.id));
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    // `stars` et `unlocked` sont les noms d'avant la boutique. Les lire encore
+    // évite d'effacer la progression de qui jouait déjà.
+    const coins = Number(parsed.coins ?? parsed.stars) || 0;
+    const anciens = Array.isArray(parsed.owned)
+      ? (parsed.owned as string[])
+      : Array.isArray(parsed.unlocked)
+        ? (parsed.unlocked as string[])
+        : [];
 
     return {
-      stars: Math.max(0, Number(parsed.stars) || 0),
+      coins: Math.max(0, coins),
       earned: Math.max(0, Number(parsed.earned) || 0),
-      // Un identifiant disparu d'une version à l'autre ne doit pas tout casser.
-      unlocked: Array.isArray(parsed.unlocked)
-        ? (parsed.unlocked.filter((id) => known.has(id as PieceSetId)) as PieceSetId[])
-        : EMPTY_WALLET.unlocked,
+      owned: keepKnownItems([...FREE_ITEMS, ...anciens]),
       lastVisitDay: Number(parsed.lastVisitDay) || 0,
       visitStreak: Math.max(0, Number(parsed.visitStreak) || 0),
     };
@@ -189,6 +180,10 @@ export const saveWallet = (wallet: Wallet): void => {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(wallet));
   } catch {
-    // Sans stockage, les étoiles ne valent que pour la session.
+    // Sans stockage, les cauris ne valent que pour la session.
   }
 };
+
+/** Écriture des sommes : « 1 250 » se lit mieux que « 1250 ». */
+export const formatCoins = (amount: number): string =>
+  amount.toLocaleString('fr-FR').replace(/ | /g, ' ');

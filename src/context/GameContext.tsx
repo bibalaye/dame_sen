@@ -67,36 +67,52 @@ import {
 } from '@/lib/daily';
 import type { MorpionVariant } from '@/lib/morpion';
 import {
-  DEFAULT_PIECE_SET,
   findPieceSet,
   loadPieceSet,
   savePieceSet,
   type PieceSet,
   type PieceSetId,
 } from '@/lib/pieceSets';
+import {
+  findBoardTheme,
+  loadBoardTheme,
+  saveBoardTheme,
+  type BoardTheme,
+  type BoardThemeId,
+} from '@/lib/boards';
+import {
+  hasFeature,
+  itemId,
+  loadCosmetics,
+  saveCosmetics,
+  type FrameId,
+  type ItemId,
+  type Loadout,
+  type TitleId,
+} from '@/lib/shop';
 import { computeStats } from '@/lib/history';
 import {
   EMPTY_WALLET,
   credit,
   gameRewards,
-  isUnlocked,
+  owns,
   loadWallet,
   registerVisit,
   saveWallet,
   totalOf,
-  unlock as unlockSet,
+  buy as buyLocally,
   type RewardReason,
   type Wallet,
 } from '@/lib/economy';
 import { useAccount } from './AccountContext';
 import type { PlayerProfile } from '@/lib/profile';
-import { EMPTY_DAILY, mergeProfiles } from '@/lib/profile';
+import { EMPTY_DAILY, EMPTY_LOADOUT, mergeProfiles } from '@/lib/profile';
 import {
   claimDailyVisit,
   recordDailyRemote,
   recordGameRemote,
-  setPieceSetRemote,
-  unlockPieceSetRemote,
+  setLoadoutRemote,
+  buyItemRemote,
 } from '@/lib/supabase/remote';
 import {
   addEntry,
@@ -112,6 +128,10 @@ import type { Socket } from 'socket.io-client';
 
 const AI_PLAYER: Player = 'black';
 const MAX_HINTS = 3;
+/** Avec le carnet d'indices, acheté en boutique. */
+const MAX_HINTS_PLUS = 6;
+/** Profondeur du retour en arrière : au-delà, on refait une partie. */
+const UNDO_LIMIT = 40;
 
 /** Où se trouve le joueur dans l'application. */
 export type Screen = 'home' | 'game';
@@ -176,6 +196,9 @@ interface GameContextType {
   isThinking: boolean;
   hint: Move | null;
   hintsLeft: number;
+  /** Vrai si un coup peut être repris — solo seulement, et si la fonction est acquise. */
+  canUndo: boolean;
+  undoMove: () => void;
   difficulty: Difficulty;
   variant: Variant;
   clock: ClockState;
@@ -187,7 +210,17 @@ interface GameContextType {
   setPieceSet: (id: PieceSetId) => void;
   /** Étoiles gagnées et jeux de pions débloqués. */
   wallet: Wallet;
-  unlockPieceSet: (id: PieceSetId) => void;
+  /** Achète n'importe quel article du catalogue. */
+  buyItem: (id: ItemId) => void;
+  /** Thème du plateau en cours. */
+  boardTheme: BoardTheme;
+  setBoardTheme: (id: BoardThemeId) => void;
+  /** Cadre et titre affichés sur le profil, `null` si aucun. */
+  loadout: Loadout;
+  setFrame: (id: FrameId | null) => void;
+  setTitle: (id: TitleId | null) => void;
+  /** Vrai si le joueur possède l'article — ou s'il est offert. */
+  ownsItem: (id: ItemId) => boolean;
   /** Gains du dernier événement, à annoncer au joueur. */
   lastRewards: readonly RewardReason[];
   clearRewards: () => void;
@@ -350,10 +383,17 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isThinking, setIsThinking] = useState(false);
   const [hint, setHint] = useState<Move | null>(null);
   const [hintsLeft, setHintsLeft] = useState(MAX_HINTS);
+  /**
+   * États précédents, pour la reprise d'un coup. Une ref plutôt qu'un état :
+   * l'empiler ne doit pas provoquer de rendu, et seul le bouton de reprise
+   * s'intéresse à sa taille — d'où le compteur qui l'accompagne.
+   */
+  const undoStack = useRef<GameState[]>([]);
+  const [undoDepth, setUndoDepth] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [clock, setClock] = useState<ClockState>(() => createClock('none', 0));
   const [muted, setMutedState] = useState(false);
-  const [pieceSetId, setPieceSetId] = useState<PieceSetId>(DEFAULT_PIECE_SET);
+  const [loadout, setLoadoutState] = useState<Loadout>(EMPTY_LOADOUT);
   const [wallet, setWallet] = useState<Wallet>(EMPTY_WALLET);
   const [lastRewards, setLastRewards] = useState<readonly RewardReason[]>([]);
   const [daily, setDaily] = useState<DailyState | null>(null);
@@ -389,12 +429,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   walletRef.current = wallet;
 
   /** Applique un solde décidé par le serveur. */
-  const applyRemoteStars = useCallback(
-    (stars: number, rewards: readonly RewardReason[]) => {
+  const applyRemoteCoins = useCallback(
+    (coins: number, rewards: readonly RewardReason[]) => {
       setWallet((current) => {
         const next: Wallet = {
           ...current,
-          stars,
+          coins,
           // Le serveur ne renvoie que le solde ; le total gagné se déduit des
           // gains qu'il vient d'accorder.
           earned: current.earned + totalOf(rewards),
@@ -425,11 +465,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (!accountRef.current) return;
 
-      void recordGameRemote(full, walletRef.current.stars).then((outcome) => {
-        if (outcome) applyRemoteStars(outcome.stars, outcome.rewards);
+      void recordGameRemote(full, walletRef.current.coins).then((outcome) => {
+        if (outcome) applyRemoteCoins(outcome.coins, outcome.rewards);
       });
     },
-    [applyRemoteStars],
+    [applyRemoteCoins],
   );
 
   const gameRef = useRef(game);
@@ -448,7 +488,11 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     setMutedState(loadMutePreference());
-    setPieceSetId(loadPieceSet());
+    setLoadoutState({
+      pieces: loadPieceSet(),
+      board: loadBoardTheme(),
+      ...loadCosmetics(),
+    });
     setWallet(loadWallet());
     preloadSounds();
   }, []);
@@ -464,8 +508,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     visitClaimed.current = true;
 
     if (account) {
-      void claimDailyVisit(walletRef.current.stars).then((outcome) => {
-        if (outcome) applyRemoteStars(outcome.stars, outcome.rewards);
+      void claimDailyVisit(walletRef.current.coins).then((outcome) => {
+        if (outcome) applyRemoteCoins(outcome.coins, outcome.rewards);
       });
       return;
     }
@@ -478,7 +522,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setWallet(outcome.wallet);
     saveWallet(outcome.wallet);
     setLastRewards(outcome.rewards);
-  }, [accountLoading, account, applyRemoteStars]);
+  }, [accountLoading, account, applyRemoteCoins]);
 
   /**
    * Ce que l'appareil détient, transmis au contexte des comptes : c'est la
@@ -489,16 +533,16 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       wallet,
       history,
       daily: loadProgress(),
-      pieceSet: pieceSetId,
+      loadout,
     });
-  }, [wallet, history, pieceSetId, provideLocalProfile]);
+  }, [wallet, history, loadout, provideLocalProfile]);
 
   /**
    * Le profil du compte prend la main. La fusion garde les parties jouées hors
    * ligne sur cet appareil : se connecter ne doit jamais effacer une partie.
    */
   const localSnapshot = useRef<PlayerProfile | null>(null);
-  localSnapshot.current = { wallet, history, daily: EMPTY_DAILY, pieceSet: pieceSetId };
+  localSnapshot.current = { wallet, history, daily: EMPTY_DAILY, loadout };
 
   useEffect(() => {
     if (!remoteProfile) return;
@@ -510,11 +554,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     setWallet(merged.wallet);
     setHistory([...merged.history]);
-    setPieceSetId(merged.pieceSet);
+    setLoadoutState(merged.loadout);
 
     saveWallet(merged.wallet);
     saveHistory(merged.history);
-    savePieceSet(merged.pieceSet);
+    savePieceSet(merged.loadout.pieces);
+    saveBoardTheme(merged.loadout.board);
+    saveCosmetics(merged.loadout);
     saveProgress(merged.daily);
     // `localSnapshot` est volontairement absent des dépendances : c'est une ref
     // lue au moment où le profil distant arrive, pas un déclencheur.
@@ -537,56 +583,108 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLastRewards(reasons);
   }, []);
 
-  const unlockPieceSet = useCallback(
-    (id: PieceSetId) => {
-      if (accountRef.current) {
-        void unlockPieceSetRemote(id).then((outcome) => {
-          if (!outcome.ok) {
-            setNotice(outcome.error);
-            return;
-          }
-          setWallet((current) => {
-            const next: Wallet = {
-              ...current,
-              stars: outcome.value.stars,
-              unlocked: outcome.value.unlocked,
-            };
-            saveWallet(next);
-            return next;
-          });
-          play('promote');
+  /**
+   * Achète un article, quelle que soit sa famille. Avec un compte, c'est le
+   * serveur qui débite et rend le solde : un achat calculé ici se contournerait
+   * depuis la console du navigateur.
+   */
+  const buyItem = useCallback((id: ItemId) => {
+    if (accountRef.current) {
+      void buyItemRemote(id).then((outcome) => {
+        if (!outcome.ok) {
+          setNotice(outcome.error);
+          return;
+        }
+        setWallet((current) => {
+          const next: Wallet = {
+            ...current,
+            coins: outcome.value.coins,
+            owned: outcome.value.owned,
+          };
+          saveWallet(next);
+          return next;
         });
-        return;
-      }
-
-      setWallet((current) => {
-        const next = unlockSet(current, id);
-        if (next === current) return current;
-        saveWallet(next);
-        return next;
+        play('promote');
       });
-      play('promote');
-    },
-    [],
-  );
+      return;
+    }
+
+    setWallet((current) => {
+      const next = buyLocally(current, id);
+      if (next === current) {
+        setNotice('Vous n’avez pas assez de cauris.');
+        return current;
+      }
+      saveWallet(next);
+      return next;
+    });
+    play('promote');
+  }, []);
 
   const clearRewards = useCallback(() => setLastRewards([]), []);
 
-  const pieceSet = useMemo(() => findPieceSet(pieceSetId), [pieceSetId]);
+  const pieceSet = useMemo(() => findPieceSet(loadout.pieces), [loadout.pieces]);
+  const boardTheme = useMemo(() => findBoardTheme(loadout.board), [loadout.board]);
 
-  const setPieceSet = useCallback(
-    (id: PieceSetId) => {
-      // Un jeu verrouillé ne se sélectionne pas : le sélecteur propose de le
-      // débloquer, il ne le met pas en jeu par mégarde.
-      if (!isUnlocked(wallet, id)) return;
-      setPieceSetId(id);
-      savePieceSet(id);
+  const ownsItem = useCallback((id: ItemId) => owns(wallet, id), [wallet]);
+
+  /**
+   * Change une partie de la tenue. Tout passe par ici : ainsi le choix est
+   * conservé sur l'appareil et envoyé au compte au même endroit, quelle que
+   * soit la famille modifiée.
+   */
+  const applyLoadout = useCallback((patch: Partial<Loadout>) => {
+    setLoadoutState((current) => {
+      const next: Loadout = { ...current, ...patch };
+
+      savePieceSet(next.pieces);
+      saveBoardTheme(next.board);
+      saveCosmetics(next);
       // Le choix suit le compte d'un appareil à l'autre. S'il ne part pas, le
       // jeu reste jouable : c'est une préférence, pas un acquis.
-      if (accountRef.current) void setPieceSetRemote(id);
-      play('select');
+      if (accountRef.current) void setLoadoutRemote(next);
+
+      return next;
+    });
+    play('select');
+  }, []);
+
+  /**
+   * On ne porte que ce qu'on possède. Le refus est silencieux : la boutique
+   * n'offre jamais le bouton, et un verrou franchi autrement ne mérite pas
+   * d'explication.
+   */
+  const setPieceSet = useCallback(
+    (id: PieceSetId) => {
+      if (!owns(wallet, itemId('pieces', id))) return;
+      applyLoadout({ pieces: id });
     },
-    [wallet],
+    [wallet, applyLoadout],
+  );
+
+  const setBoardTheme = useCallback(
+    (id: BoardThemeId) => {
+      if (!owns(wallet, itemId('board', id))) return;
+      applyLoadout({ board: id });
+    },
+    [wallet, applyLoadout],
+  );
+
+  // Un cadre ou un titre se retire aussi : `null` est un choix valable.
+  const setFrame = useCallback(
+    (id: FrameId | null) => {
+      if (id !== null && !owns(wallet, itemId('frame', id))) return;
+      applyLoadout({ frame: id });
+    },
+    [wallet, applyLoadout],
+  );
+
+  const setTitle = useCallback(
+    (id: TitleId | null) => {
+      if (id !== null && !owns(wallet, itemId('title', id))) return;
+      applyLoadout({ title: id });
+    },
+    [wallet, applyLoadout],
   );
 
   /**
@@ -709,7 +807,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setSelectedCell(null);
     setIsThinking(false);
     setHint(null);
-    setHintsLeft(MAX_HINTS);
+    setHintsLeft(hasFeature(walletRef.current.owned, 'indices') ? MAX_HINTS_PLUS : MAX_HINTS);
+    undoStack.current = [];
+    setUndoDepth(0);
     setNotice(null);
     setBestChain(0);
     reportedWinner.current = null;
@@ -890,6 +990,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const next = playMove(current, move);
       if (next === current) return;
 
+      undoStack.current = [...undoStack.current.slice(-UNDO_LIMIT), current];
+      setUndoDepth(undoStack.current.length);
+
       gameRef.current = next;
       setGame(next);
 
@@ -982,9 +1085,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         void recordDailyRemote(
           daily.puzzle.number,
           solved,
-          walletRef.current.stars,
+          walletRef.current.coins,
         ).then((outcome) => {
-          if (outcome) applyRemoteStars(outcome.stars, outcome.rewards);
+          if (outcome) applyRemoteCoins(outcome.coins, outcome.rewards);
         });
       } else if (solved) {
         earn(['daily-solved']);
@@ -992,7 +1095,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     setDaily({ ...daily, attempts, solved, finished, streak });
-  }, [game, mode, daily, earn, applyRemoteStars]);
+  }, [game, mode, daily, earn, applyRemoteCoins]);
 
   const retryDaily = useCallback(() => {
     if (!daily || daily.finished) return;
@@ -1135,6 +1238,49 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     [canPlay, commitMove, game, mustCapture, selection, validMoves],
   );
 
+  /**
+   * Reprend un coup. On remonte jusqu'au dernier état où c'était au joueur de
+   * jouer : s'arrêter au coup précédent rendrait la main à la machine, qui
+   * rejouerait aussitôt le même coup — la reprise n'aurait rien repris.
+   *
+   * Réservé au solo. Contre un humain, en ligne comme sur le même appareil,
+   * revenir en arrière se négocie entre joueurs, pas par un bouton.
+   */
+  const canUndo =
+    mode === 'solo' &&
+    undoDepth > 0 &&
+    !gameOver &&
+    hasFeature(wallet.owned, 'retour');
+
+  const undoMove = useCallback(() => {
+    if (mode !== 'solo') return;
+    if (!hasFeature(walletRef.current.owned, 'retour')) return;
+
+    const pile = [...undoStack.current];
+    let cible: GameState | null = null;
+
+    while (pile.length > 0) {
+      const candidat = pile.pop()!;
+      if (candidat.currentPlayer !== AI_PLAYER && candidat.status.kind === 'playing') {
+        cible = candidat;
+        break;
+      }
+    }
+
+    if (!cible) return;
+
+    undoStack.current = pile;
+    setUndoDepth(pile.length);
+
+    gameRef.current = cible;
+    setGame(cible);
+    setSelectedCell(null);
+    setHint(null);
+    setIsThinking(false);
+    setNotice('Coup repris.');
+    play('click');
+  }, [mode]);
+
   const requestHint = useCallback(() => {
     if (hintsLeft <= 0 || !canPlay(game.currentPlayer)) return;
 
@@ -1189,6 +1335,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       isThinking,
       hint,
       hintsLeft,
+      canUndo,
+      undoMove,
       difficulty,
       variant,
       clock,
@@ -1197,7 +1345,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       pieceSet,
       setPieceSet,
       wallet,
-      unlockPieceSet,
+      buyItem,
+      boardTheme,
+      setBoardTheme,
+      loadout,
+      setFrame,
+      setTitle,
+      ownsItem,
       lastRewards,
       clearRewards,
       gameId,
@@ -1253,6 +1407,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       handleCellClick,
       hint,
       hintsLeft,
+      canUndo,
+      undoMove,
       isFlipped,
       invitedRoom,
       isConnected,
@@ -1279,7 +1435,13 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       requestHint,
       rules,
       setPieceSet,
-      unlockPieceSet,
+      buyItem,
+      boardTheme,
+      setBoardTheme,
+      loadout,
+      setFrame,
+      setTitle,
+      ownsItem,
       wallet,
       resetGame,
       retryDaily,

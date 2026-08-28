@@ -1,0 +1,304 @@
+/*
+ * La boutique.
+ *
+ * La rareté d'un article se lit à la couleur de son cadre, portée par la
+ * variable `--rarity` posée sur chaque carte. Un prix seul ne dit pas ce qui
+ * est beau ; une bordure dorée, si.
+ */
+
+/* --- Bourse ---------------------------------------------------------------- */
+
+.purse {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 7px;
+  margin-bottom: 14px;
+  padding: 10px;
+  border: 2px solid var(--brass);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--brass) 12%, var(--surface));
+}
+
+.purse img {
+  align-self: center;
+}
+
+.purse strong {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  color: var(--brass-ink);
+}
+
+.purse span {
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+/* --- Rayons ---------------------------------------------------------------- */
+
+.tabs {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 14px;
+  padding: 5px;
+  border-radius: 14px;
+  background: var(--surface-sunk);
+  /* Cinq rayons ne tiennent pas sur un écran étroit : ils défilent. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  flex: 1 0 auto;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.tabOn {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+}
+
+.tab:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* --- Grille ---------------------------------------------------------------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  max-height: 56vh;
+  overflow-y: auto;
+  /* La bordure de rareté déborde légèrement : sans marge, elle serait rognée
+     par le cadre de défilement. */
+  padding: 4px;
+  margin: -4px;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 18px 10px 12px;
+  border: 2px solid var(--rarity, var(--line));
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-soft);
+}
+
+.card:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* L'article porté se distingue par son fond, pas par sa bordure : celle-ci dit
+   déjà la rareté, et deux messages sur le même trait s'annulent. */
+.cardOn {
+  background: color-mix(in srgb, var(--rarity) 16%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--rarity);
+}
+
+/* Un article verrouillé se montre en retrait : on voit ce qu'on peut viser. */
+.cardLocked .preview {
+  opacity: 0.72;
+  filter: grayscale(0.4);
+}
+
+.cardOut {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.rarity {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 9px;
+  border-radius: 50px;
+  background: var(--rarity, var(--line));
+  color: #fff;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.preview {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 56px;
+}
+
+/* --- Aperçus par famille --------------------------------------------------- */
+
+.previewBoard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 6px;
+  border-radius: 10px;
+  background: linear-gradient(148deg, var(--square-light), var(--square-dark));
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.previewBoard img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 2px rgba(20, 12, 4, 0.5));
+}
+
+/* La dame, légèrement détachée pour se distinguer des deux pions. */
+.king {
+  margin-left: 5px;
+}
+
+.previewSquares {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  width: 56px;
+  height: 56px;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.previewSquares span {
+  display: block;
+}
+
+.previewFrame span {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 3px solid;
+  border-radius: 50%;
+  background: var(--surface-sunk);
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.previewTitle {
+  padding: 7px 11px;
+  border: 2px solid var(--line);
+  border-radius: 50px;
+  background: var(--surface-sunk);
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.previewFeature {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+/* --- Texte ----------------------------------------------------------------- */
+
+.name {
+  font-size: 0.94rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.detail {
+  font-size: 0.68rem;
+  line-height: 1.35;
+  color: var(--text-soft);
+}
+
+.footer {
+  margin-top: 3px;
+}
+
+.worn,
+.owned,
+.price,
+.priceOut {
+  display: inline-block;
+  padding: 4px 11px;
+  border-radius: 50px;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.worn {
+  background: var(--rarity);
+  color: #fff;
+}
+
+.owned {
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  color: var(--text-soft);
+}
+
+.price {
+  background: var(--green);
+  color: #fff;
+}
+
+.priceOut {
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  color: var(--text-soft);
+}
+
+.note {
+  margin: 14px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .tab {
+    transition: none;
+  }
+}
+
+@media (max-width: 340px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

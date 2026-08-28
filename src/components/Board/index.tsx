@@ -10,6 +10,7 @@ import {
   reconcilePieces,
   type PieceView,
 } from '@/lib/pieceLayer';
+import { boardStyle } from '@/lib/boards';
 import styles from './Board.module.css';
 
 /** Durée de l'animation de sortie d'une pièce prise, en millisecondes. */
@@ -29,6 +30,7 @@ const Board = () => {
     isFlipped,
     gameId,
     pieceSet,
+    boardTheme,
     BOARD_SIZE,
   } = useGameContext();
 
@@ -82,7 +84,9 @@ const Board = () => {
   const cellPercent = 100 / BOARD_SIZE;
 
   return (
-    <div className={styles.boardWrapper}>
+    // Le thème choisi est posé ici, en variables locales : le damier change de
+    // bois sans que le reste de l'application change de thème clair ou sombre.
+    <div className={styles.boardWrapper} style={boardStyle(boardTheme)}>
       <div
         className={`${styles.board} ${isFlipped ? styles.flipped : ''}`}
         role="grid"

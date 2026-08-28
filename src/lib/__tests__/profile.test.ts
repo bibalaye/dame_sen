@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 
 import {
   EMPTY_DAILY,
+  EMPTY_LOADOUT,
   EMPTY_PROFILE,
-  IMPORT_STAR_CAP,
+  IMPORT_COIN_CAP,
   hasLocalProgress,
   mergeDaily,
   mergeHistory,
@@ -15,7 +16,7 @@ import {
 } from '../profile.ts';
 import { EMPTY_WALLET, type Wallet } from '../economy.ts';
 import { HISTORY_LIMIT, type HistoryEntry } from '../history.ts';
-import { DEFAULT_PIECE_SET } from '../pieceSets.ts';
+import { itemId } from '../shop.ts';
 
 const partie = (id: string, playedAt: number): HistoryEntry => ({
   id,
@@ -126,28 +127,28 @@ describe('fusion des séries du défi', () => {
 
 describe('fusion des portefeuilles', () => {
   test('le solde du compte fait foi', () => {
-    const local = walletWith({ stars: 999_999, earned: 999_999 });
-    const distant = walletWith({ stars: 120, earned: 300 });
+    const local = walletWith({ coins: 999_999, earned: 999_999 });
+    const distant = walletWith({ coins: 120, earned: 300 });
 
     const merged = mergeWallet(local, distant);
-    assert.equal(merged.stars, 120, 'un solde local gonflé n’est pas repris');
+    assert.equal(merged.coins, 120, 'un solde local gonflé n’est pas repris');
     assert.equal(merged.earned, 300);
   });
 
   test('les déblocages des deux côtés se cumulent', () => {
-    const local = walletWith({ unlocked: ['cauri', 'sabar'] });
-    const distant = walletWith({ unlocked: ['cauri', 'baobab'] });
+    const local = walletWith({ owned: [itemId('pieces', 'cauri'), itemId('pieces', 'sabar')] });
+    const distant = walletWith({ owned: [itemId('pieces', 'cauri'), itemId('pieces', 'baobab')] });
 
     const merged = mergeWallet(local, distant);
-    assert.deepEqual([...merged.unlocked].sort(), ['baobab', 'cauri', 'sabar']);
+    assert.deepEqual([...merged.owned].sort(), ['pieces:baobab', 'pieces:cauri', 'pieces:sabar']);
   });
 
   test('un déblocage n’apparaît jamais en double', () => {
     const merged = mergeWallet(
-      walletWith({ unlocked: ['cauri', 'sabar'] }),
-      walletWith({ unlocked: ['sabar', 'cauri'] }),
+      walletWith({ owned: [itemId('pieces', 'cauri'), itemId('pieces', 'sabar')] }),
+      walletWith({ owned: [itemId('pieces', 'sabar'), itemId('pieces', 'cauri')] }),
     );
-    assert.equal(merged.unlocked.length, 2);
+    assert.equal(merged.owned.length, 2);
   });
 
   test('la venue la plus récente est retenue avec sa série', () => {
@@ -171,17 +172,17 @@ describe('fusion des portefeuilles', () => {
 
 describe('fusion complète', () => {
   test('un compte neuf garde les pions choisis sur l’appareil', () => {
-    const local = profileWith({ pieceSet: 'baobab' });
-    const distant = profileWith({ pieceSet: DEFAULT_PIECE_SET });
+    const local = profileWith({ loadout: { ...EMPTY_LOADOUT, pieces: 'baobab' } });
+    const distant = profileWith({ loadout: EMPTY_LOADOUT });
 
-    assert.equal(mergeProfiles(local, distant).pieceSet, 'baobab');
+    assert.equal(mergeProfiles(local, distant).loadout.pieces, 'baobab');
   });
 
   test('un compte qui a choisi impose ses pions', () => {
-    const local = profileWith({ pieceSet: 'baobab' });
-    const distant = profileWith({ pieceSet: 'donjon' });
+    const local = profileWith({ loadout: { ...EMPTY_LOADOUT, pieces: 'baobab' } });
+    const distant = profileWith({ loadout: { ...EMPTY_LOADOUT, pieces: 'donjon' } });
 
-    assert.equal(mergeProfiles(local, distant).pieceSet, 'donjon');
+    assert.equal(mergeProfiles(local, distant).loadout.pieces, 'donjon');
   });
 
   test('les parties hors ligne rejoignent celles du compte', () => {
@@ -195,13 +196,13 @@ describe('fusion complète', () => {
   test('rien n’est perdu en fusionnant deux profils vierges', () => {
     const merged = mergeProfiles(EMPTY_PROFILE, EMPTY_PROFILE);
     assert.deepEqual(merged.history, []);
-    assert.equal(merged.wallet.stars, 0);
+    assert.equal(merged.wallet.coins, 0);
   });
 
   test('les profils reçus ne sont pas modifiés', () => {
     const local = profileWith({
       history: [partie('a', 100)],
-      wallet: walletWith({ stars: 50, unlocked: ['cauri', 'sabar'] }),
+      wallet: walletWith({ coins: 50, owned: [itemId('pieces', 'cauri'), itemId('pieces', 'sabar')] }),
     });
     const avant = JSON.stringify(local);
 
@@ -212,23 +213,23 @@ describe('fusion complète', () => {
 
 describe('reprise d’une progression hors compte', () => {
   test('un solde honnête est repris tel quel', () => {
-    const local = profileWith({ wallet: walletWith({ stars: 250 }) });
+    const local = profileWith({ wallet: walletWith({ coins: 250 }) });
     const resume = summarizeImport(local);
 
-    assert.equal(resume.stars, 250);
+    assert.equal(resume.coins, 250);
     assert.ok(!resume.capped);
   });
 
   test('un solde gonflé est plafonné', () => {
-    const local = profileWith({ wallet: walletWith({ stars: 5_000_000 }) });
+    const local = profileWith({ wallet: walletWith({ coins: 5_000_000 }) });
     const resume = summarizeImport(local);
 
-    assert.equal(resume.stars, IMPORT_STAR_CAP);
+    assert.equal(resume.coins, IMPORT_COIN_CAP);
     assert.ok(resume.capped, 'le joueur doit savoir que le solde a été rogné');
   });
 
   test('le plafond exact n’est pas signalé comme rogné', () => {
-    const local = profileWith({ wallet: walletWith({ stars: IMPORT_STAR_CAP }) });
+    const local = profileWith({ wallet: walletWith({ coins: IMPORT_COIN_CAP }) });
     assert.ok(!summarizeImport(local).capped);
   });
 
@@ -256,14 +257,14 @@ describe('détection d’une progression à reprendre', () => {
   test('un jeu de pions débloqué suffit', () => {
     assert.ok(
       hasLocalProgress(
-        profileWith({ wallet: walletWith({ unlocked: ['cauri', 'sabar'] }) }),
+        profileWith({ wallet: walletWith({ owned: [itemId('pieces', 'cauri'), itemId('pieces', 'sabar')] }) }),
       ),
     );
   });
 
   test('le jeu de pions offert ne compte pas pour une progression', () => {
     assert.ok(
-      !hasLocalProgress(profileWith({ wallet: walletWith({ unlocked: ['cauri'] }) })),
+      !hasLocalProgress(profileWith({ wallet: walletWith({ owned: [itemId('pieces', 'cauri')] }) })),
     );
   });
 });

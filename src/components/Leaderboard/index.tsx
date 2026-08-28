@@ -5,7 +5,15 @@ import React, { useEffect, useState } from 'react';
 import Modal from '../Modal';
 import { useAccount } from '@/context/AccountContext';
 import { fetchLeaderboard, type LeaderboardRow } from '@/lib/supabase/remote';
+import { FRAMES, TITLES, itemId } from '@/lib/shop';
 import styles from './Leaderboard.module.css';
+
+/** Libellé d'un titre porté, ou rien si le joueur n'en affiche aucun. */
+const titreDe = (id: string | null): string | undefined =>
+  TITLES.find((entry) => entry.id === itemId('title', id ?? ''))?.label;
+
+const couleurDe = (id: string | null): string | undefined =>
+  FRAMES.find((entry) => entry.id === itemId('frame', id ?? ''))?.color;
 
 interface LeaderboardProps {
   onClose: () => void;
@@ -58,9 +66,21 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ onClose }) => {
                 key={row.handle}
                 className={`${styles.row} ${isMine ? styles.mine : ''}`}
               >
-                <span className={styles.rank}>{index + 1}</span>
+                <span
+                  className={styles.rank}
+                  style={couleurDe(row.frame) ? { color: couleurDe(row.frame) } : undefined}
+                >
+                  {index + 1}
+                </span>
                 <span className={styles.who}>
-                  {row.displayName}
+                  <span className={styles.identity}>
+                    <span className={styles.pseudo}>{row.displayName}</span>
+                    {/* Le titre acheté s'affiche ici : c'est là qu'il se voit
+                        des autres joueurs, et donc là qu'il vaut son prix. */}
+                    {titreDe(row.title) && (
+                      <span className={styles.playerTitle}>{titreDe(row.title)}</span>
+                    )}
+                  </span>
                   {isMine && <span className={styles.you}>vous</span>}
                 </span>
                 <span className={styles.score}>

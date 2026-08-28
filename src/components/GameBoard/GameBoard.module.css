@@ -162,3 +162,11 @@
 .leftActions .btn {
   flex: 1;
 }
+
+/* Les actions du solo, côte à côte sous le plateau. */
+.soloActions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

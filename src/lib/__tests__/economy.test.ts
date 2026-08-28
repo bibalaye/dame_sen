@@ -3,27 +3,30 @@ import assert from 'node:assert/strict';
 
 import {
   EMPTY_WALLET,
-  PIECE_SET_PRICES,
   REWARDS,
+  buy,
   canAfford,
   credit,
+  formatCoins,
   gameRewards,
-  isUnlocked,
-  nextGoal,
-  priceOf,
+  owns,
   registerVisit,
   totalOf,
-  unlock,
   type Wallet,
 } from '../economy.ts';
-import { PIECE_SETS } from '../pieceSets.ts';
+import { CATALOG, FREE_ITEMS, itemId, priceOfItem } from '../shop.ts';
 
 const walletWith = (values: Partial<Wallet>): Wallet => ({ ...EMPTY_WALLET, ...values });
+
+const SABAR = itemId('pieces', 'sabar');
+const ENVOL = itemId('pieces', 'envol');
+const WAX = itemId('board', 'wax');
+const OFFERT = itemId('pieces', 'cauri');
 
 describe('gains', () => {
   test('créditer augmente le solde et le total gagné', () => {
     const after = credit(EMPTY_WALLET, 'win');
-    assert.equal(after.stars, REWARDS.win);
+    assert.equal(after.coins, REWARDS.win);
     assert.equal(after.earned, REWARDS.win);
   });
 
@@ -61,7 +64,7 @@ describe('venue quotidienne', () => {
   test('la première venue est récompensée', () => {
     const { wallet, rewards } = registerVisit(EMPTY_WALLET, 100);
     assert.deepEqual(rewards, ['daily-login']);
-    assert.equal(wallet.stars, REWARDS['daily-login']);
+    assert.equal(wallet.coins, REWARDS['daily-login']);
     assert.equal(wallet.visitStreak, 1);
   });
 
@@ -70,7 +73,7 @@ describe('venue quotidienne', () => {
     const second = registerVisit(wallet, 100);
 
     assert.deepEqual(second.rewards, []);
-    assert.equal(second.wallet.stars, wallet.stars, 'le solde ne bouge pas');
+    assert.equal(second.wallet.coins, wallet.coins, 'le solde ne bouge pas');
   });
 
   test('la série suit les jours consécutifs', () => {
@@ -107,44 +110,57 @@ describe('venue quotidienne', () => {
     for (let day = 1; day <= 14; day += 2) wallet = registerVisit(wallet, day).wallet;
 
     assert.equal(wallet.visitStreak, 1);
-    assert.equal(wallet.stars, REWARDS['daily-login'] * 7, 'aucune prime hebdomadaire');
+    assert.equal(wallet.coins, REWARDS['daily-login'] * 7, 'aucune prime hebdomadaire');
   });
 });
 
-describe('déblocages', () => {
-  test('le premier jeu de pions est offert', () => {
-    assert.equal(priceOf('cauri'), 0);
-    assert.ok(isUnlocked(EMPTY_WALLET, 'cauri'));
+describe('achats', () => {
+  test('ce qui est offert est acquis d’emblée', () => {
+    assert.equal(priceOfItem(OFFERT), 0);
+    assert.ok(owns(EMPTY_WALLET, OFFERT));
   });
 
-  test('les autres sont verrouillés au départ', () => {
-    for (const set of PIECE_SETS) {
-      if (priceOf(set.id) === 0) continue;
-      assert.ok(!isUnlocked(EMPTY_WALLET, set.id), `${set.id} devrait être verrouillé`);
+  test('le reste est verrouillé au départ', () => {
+    for (const item of CATALOG) {
+      if (item.price === 0) continue;
+      assert.ok(!owns(EMPTY_WALLET, item.id), `${item.id} devrait être verrouillé`);
     }
   });
 
-  test('débloquer débite le solde', () => {
-    const rich = walletWith({ stars: 1000 });
-    const after = unlock(rich, 'sabar');
+  test('acheter débite le solde', () => {
+    const riche = walletWith({ coins: 1000 });
+    const after = buy(riche, SABAR);
 
-    assert.ok(isUnlocked(after, 'sabar'));
-    assert.equal(after.stars, 1000 - priceOf('sabar'));
+    assert.ok(owns(after, SABAR));
+    assert.equal(after.coins, 1000 - priceOfItem(SABAR));
   });
 
-  test('un solde insuffisant ne débloque rien', () => {
-    const poor = walletWith({ stars: 10 });
-    assert.equal(unlock(poor, 'jetons'), poor, 'rien ne change');
-    assert.ok(!canAfford(poor, 'jetons'));
+  test('toutes les familles s’achètent de la même façon', () => {
+    let wallet = walletWith({ coins: 10_000 });
+    for (const id of [SABAR, WAX, itemId('frame', 'laiton'), itemId('feature', 'indices')]) {
+      wallet = buy(wallet, id);
+      assert.ok(owns(wallet, id), `${id} devrait être acquis`);
+    }
   });
 
-  test('on ne paie jamais deux fois le même jeu', () => {
-    const rich = walletWith({ stars: 2000 });
-    const once = unlock(rich, 'sabar');
-    const twice = unlock(once, 'sabar');
+  test('un solde insuffisant n’achète rien', () => {
+    const pauvre = walletWith({ coins: 10 });
+    assert.equal(buy(pauvre, ENVOL), pauvre, 'rien ne change');
+    assert.ok(!canAfford(pauvre, ENVOL));
+  });
 
-    assert.equal(twice.stars, once.stars, 'le second achat ne débite pas');
-    assert.equal(twice.unlocked.length, once.unlocked.length);
+  test('on ne paie jamais deux fois le même article', () => {
+    const riche = walletWith({ coins: 2000 });
+    const une = buy(riche, SABAR);
+    const deux = buy(une, SABAR);
+
+    assert.equal(deux.coins, une.coins, 'le second achat ne débite pas');
+    assert.equal(deux.owned.length, une.owned.length);
+  });
+
+  test('acheter un article offert ne débite rien', () => {
+    const wallet = walletWith({ coins: 500 });
+    assert.equal(buy(wallet, OFFERT).coins, 500);
   });
 
   test('le total gagné survit aux achats', () => {
@@ -152,62 +168,52 @@ describe('déblocages', () => {
     for (let i = 0; i < 20; i++) wallet = credit(wallet, 'win');
     const gagne = wallet.earned;
 
-    wallet = unlock(wallet, 'sabar');
+    wallet = buy(wallet, SABAR);
     assert.equal(wallet.earned, gagne, 'dépenser n’efface pas ce qu’on a gagné');
-    assert.ok(wallet.stars < gagne);
+    assert.ok(wallet.coins < gagne);
   });
 
-  test('chaque jeu de pions a un prix déclaré', () => {
-    for (const set of PIECE_SETS) {
-      assert.equal(
-        typeof PIECE_SET_PRICES[set.id],
-        'number',
-        `prix manquant pour ${set.id}`,
-      );
+  test('chaque article du catalogue a un prix', () => {
+    for (const item of CATALOG) {
+      assert.equal(typeof item.price, 'number', `prix manquant pour ${item.id}`);
+      assert.ok(item.price >= 0, `prix négatif pour ${item.id}`);
     }
+  });
+
+  test('un joueur neuf possède exactement ce qui est offert', () => {
+    assert.deepEqual([...EMPTY_WALLET.owned].sort(), [...FREE_ITEMS].sort());
   });
 });
 
-describe('prochain objectif', () => {
-  test('c’est le moins cher des jeux verrouillés', () => {
-    const goal = nextGoal(EMPTY_WALLET);
-    assert.ok(goal);
-    assert.equal(goal!.id, 'sabar');
-    assert.equal(goal!.missing, priceOf('sabar'));
+describe('écriture des sommes', () => {
+  test('les milliers sont séparés', () => {
+    assert.match(formatCoins(1250), /^1\s250$/);
   });
 
-  test('il tient compte de ce qui est déjà en poche', () => {
-    const goal = nextGoal(walletWith({ stars: 100 }));
-    assert.equal(goal!.missing, priceOf('sabar') - 100);
-  });
-
-  test('rien à viser une fois tout débloqué', () => {
-    const complet = walletWith({
-      stars: 0,
-      unlocked: PIECE_SETS.map((set) => set.id),
-    });
-    assert.equal(nextGoal(complet), null);
+  test('les petites sommes restent telles quelles', () => {
+    assert.equal(formatCoins(35), '35');
+    assert.equal(formatCoins(0), '0');
   });
 });
 
 describe('robustesse', () => {
   test('le portefeuille reçu n’est jamais modifié', () => {
-    const before = walletWith({ stars: 500 });
+    const before = walletWith({ coins: 500 });
     credit(before, 'win');
-    unlock(before, 'sabar');
+    buy(before, SABAR);
     registerVisit(before, 42);
 
-    assert.equal(before.stars, 500);
-    assert.equal(before.unlocked.length, 1);
+    assert.equal(before.coins, 500);
+    assert.deepEqual(before.owned, EMPTY_WALLET.owned);
   });
 
   test('le solde ne devient jamais négatif', () => {
-    let wallet = walletWith({ stars: priceOf('sabar') });
-    wallet = unlock(wallet, 'sabar');
-    assert.equal(wallet.stars, 0);
+    let wallet = walletWith({ coins: priceOfItem(SABAR) });
+    wallet = buy(wallet, SABAR);
+    assert.equal(wallet.coins, 0);
 
-    wallet = unlock(wallet, 'teranga');
-    assert.ok(wallet.stars >= 0);
-    assert.ok(!isUnlocked(wallet, 'teranga'));
+    wallet = buy(wallet, ENVOL);
+    assert.ok(wallet.coins >= 0);
+    assert.ok(!owns(wallet, ENVOL));
   });
 });

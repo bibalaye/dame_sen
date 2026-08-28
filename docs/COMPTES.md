@@ -1,7 +1,7 @@
 # Comptes joueurs — mise en service
 
 Le jeu fonctionne entièrement sans compte. Cette page explique comment activer
-les comptes, ce qui permet à un joueur de retrouver ses étoiles, son historique
+les comptes, ce qui permet à un joueur de retrouver ses cauris, son historique
 et ses pions sur un autre appareil.
 
 Tant que les deux variables d'environnement sont vides, rien ne change : la
@@ -34,10 +34,16 @@ Il installe :
 
 | Objet | Rôle |
 | --- | --- |
-| `profiles` | pseudo, étoiles, pions débloqués, séries |
+| `profiles` | pseudo, cauris, inventaire, tenue, séries |
 | `games` | historique des parties |
+| `catalog` | prix de chaque article, miroir de `src/lib/shop.ts` |
 | `leaderboard` | vue du classement, sans solde ni identifiant |
 | 7 fonctions | les seules écritures autorisées |
+
+Si la base était installée avant la boutique, le script la reprend : `stars`
+devient `coins`, `unlocked` devient `owned`, et les identifiants d'articles
+reçoivent leur famille (`sabar` → `pieces:sabar`). Rien n'est perdu, et un test
+le vérifie.
 
 ## 3. Régler l'authentification
 
@@ -87,10 +93,10 @@ déguisement.
 être réinitialisé. C'est le prix de l'absence de friction à l'inscription, et
 la fenêtre d'inscription le dit au joueur.
 
-### Le serveur décide des étoiles
+### Le serveur décide des cauris
 
 Le navigateur détient un jeton qui lui permet d'appeler l'API directement. Si
-les tables étaient modifiables par le client, se donner un million d'étoiles
+les tables étaient modifiables par le client, se donner un million de cauris
 tiendrait en une ligne dans la console.
 
 Les tables sont donc **en lecture seule** pour le joueur : aucune politique
@@ -102,9 +108,9 @@ par une fonction `security definer` qui applique le barème côté serveur :
 | `claim_daily_visit` | la date vient du serveur, pas du téléphone |
 | `record_game` | une partie déjà envoyée ne rapporte pas deux fois |
 | `record_daily` | un défi ne compte qu'une fois, quels que soient les essais |
-| `unlock_piece_set` | le solde est vérifié avant d'être débité |
-| `set_piece_set` | on ne met en jeu que ce qu'on possède |
-| `import_local_progress` | une seule reprise, plafonnée à 1000 étoiles |
+| `buy_item` | le solde est vérifié avant d'être débité |
+| `set_loadout` | on ne porte que ce qu'on possède |
+| `import_local_progress` | une seule reprise, plafonnée à 1000 cauris |
 
 Le barème est écrit deux fois : dans `supabase/schema.sql` et dans
 `src/lib/economy.ts`. Le client l'affiche, le serveur en décide. **Toute
@@ -116,10 +122,10 @@ Se connecter ne doit jamais faire disparaître une partie. Le profil du serveur
 et celui de l'appareil sont donc fusionnés (`src/lib/profile.ts`) :
 
 - **historique** — réunion des deux, sans doublon, la plus récente en tête ;
-- **pions débloqués** — réunion : un acquis ne se perd pas ;
+- **inventaire** — réunion : un article acquis ne se perd pas ;
 - **solde** — celui du serveur fait foi, jamais celui du navigateur ;
 - **séries** — la progression la plus avancée l'emporte ;
-- **pions choisis** — le compte décide, sauf s'il n'a jamais choisi.
+- **tenue** — le compte décide, sauf là où il n'a jamais rien choisi.
 
 Ces règles sont testées dans `src/lib/__tests__/profile.test.ts`.
 
@@ -129,7 +135,7 @@ Un joueur qui a déjà joué sans compte ne doit pas repartir de zéro. À
 l'inscription — et seulement là — sa progression locale rejoint le compte.
 
 Le contenu du navigateur se modifie à la main : le solde repris est donc
-plafonné à 1000 étoiles et l'opération refusée au second appel. Rien d'argent
+plafonné à 1000 cauris et l'opération refusée au second appel. Rien d'argent
 réel n'étant en jeu, ce garde-fou simple vaut mieux qu'un dispositif compliqué.
 
 ---
@@ -137,7 +143,7 @@ réel n'étant en jeu, ce garde-fou simple vaut mieux qu'un dispositif compliqu�
 ### Le schéma est testé, pas seulement écrit
 
 Les règles d'économie vivent maintenant en SQL : c'est le serveur qui accorde
-les étoiles. Un barème qui ne s'exécute nulle part avant la production est un
+les cauris. Un barème qui ne s'exécute nulle part avant la production est un
 pari — et le premier bug trouvé de cette façon (`malformed array literal`,
 invisible à l'analyse syntaxique) n'était pas dans un chemin exotique, mais
 dans la fin de partie ordinaire.
@@ -146,13 +152,17 @@ dans la fin de partie ordinaire.
 npm run test:sql
 ```
 
-37 tests exécutent le schéma dans un vrai PostgreSQL fourni par PGlite, en
+46 tests exécutent le schéma dans un vrai PostgreSQL fourni par PGlite, en
 WebAssembly : rien à installer, aucun conteneur à lancer, aucune connexion au
-projet Supabase. Ils exercent chaque chemin des sept fonctions — série de trois
+projet Supabase. Ils exercent chaque chemin des fonctions — série de trois
 victoires, prime du septième jour, partie renvoyée deux fois, solde
-insuffisant, seconde reprise refusée — et vérifient qu'aucune politique
-d'écriture n'existe et que le classement ne laisse filtrer ni solde ni
-identifiant.
+insuffisant, seconde reprise refusée, reprise d'une base d'avant la boutique —
+et vérifient qu'aucune politique d'écriture n'existe et que le classement ne
+laisse filtrer ni solde ni identifiant.
+
+Deux d'entre eux comparent le catalogue et le barème du serveur à ceux de
+`src/lib/shop.ts` et `src/lib/economy.ts` : un prix affiché mais non appliqué
+trompe le joueur, et rien d'autre ne l'aurait signalé.
 
 `npm test` lance les tests unitaires puis ceux-ci.
 
@@ -161,7 +171,7 @@ identifiant.
 1. Ouvrir le jeu, cliquer sur le bouton rond en haut à droite de l'accueil.
 2. Créer un compte. Si la progression de l'appareil est proposée, la reprendre.
 3. Dans Supabase, **Table Editor → profiles** : la ligne doit être là.
-4. Jouer une partie, la terminer, recharger la page : les étoiles tiennent.
+4. Jouer une partie, la terminer, recharger la page : les cauris tiennent.
 5. Ouvrir le jeu dans une fenêtre privée, se connecter : la progression suit.
 
 ### Si quelque chose bloque
@@ -175,3 +185,50 @@ identifiant.
 
 Les erreurs détaillées partent dans la console du navigateur, préfixées
 `[compte]`.
+
+---
+
+## La boutique
+
+Une seule monnaie, le **cauri** — le coquillage qui a servi de monnaie en
+Afrique de l'Ouest pendant des siècles. Elle se gagne en jouant, jamais avec de
+l'argent réel : ni achat, ni publicité, ni retrait.
+
+### Cinq rayons
+
+| Rayon | Ce qu'on y trouve | Effet |
+| --- | --- | --- |
+| Pions | 16 jeux, de formes réellement différentes | décor |
+| Plateaux | 8 damiers | décor |
+| Cadres | 4 liserés autour de l'initiale | décor, visible au classement |
+| Titres | 5 mentions sous le pseudo | décor, visible au classement |
+| Fonctions | 2 commodités | **solo uniquement** |
+
+Chaque article porte une rareté — commun, rare, épique, légendaire — qui donne
+sa couleur au cadre de la carte. Un prix seul ne dit pas ce qui est beau ; entre
+700 et 900 cauris, rien n'indiquait lequel valait le détour.
+
+### La règle qui ne souffre pas d'exception
+
+**Rien de ce qui s'achète ne change une règle du jeu ni ne donne un avantage sur
+un adversaire humain.** Les deux fonctions vendues — six indices au lieu de
+trois, et la reprise d'un coup — se désactivent d'elles-mêmes dès qu'un humain
+est en face, en ligne comme sur le même appareil. Un joueur qui ne dépense
+jamais rien ne joue pas un moins bon jeu.
+
+### Ajouter un article
+
+1. Déclarer le visuel dans `src/lib/pieceSets.ts` ou `src/lib/boards.ts` (les
+   cadres, titres et fonctions vivent directement dans `src/lib/shop.ts`).
+2. Ajouter la ligne correspondante dans la table `catalog` de
+   `supabase/schema.sql`, avec le même prix.
+3. Lancer `npm test` : un test compare les deux catalogues et refuse tout écart.
+4. Rejouer `schema.sql` dans Supabase.
+
+### Les pièces
+
+`node scripts/extract-pieces.mjs` extrait les silhouettes du lot Kenney vers
+`public/assets/pieces`. Le script refuse de finir si une dame est identique à
+son pion — une promotion invisible casse la partie — ou si deux fichiers font
+double emploi. Il n'utilise que les séries `border` et `multi` : pour les
+véhicules, la série `single` n'a pas de version empilée.

@@ -172,7 +172,7 @@ export const AccountProvider: React.FC<{ children: ReactNode }> = ({ children })
         // le contenu d'un navigateur.
         if (takeLocal && hasLocalProgress(localProfile)) {
           const resume = summarizeImport(localProfile);
-          await importLocalProgress(resume.stars, localProfile.history);
+          await importLocalProgress(resume.coins, localProfile.history);
 
           const fresh = await refresh();
           setRemoteProfile(fresh ?? outcome.value.profile);

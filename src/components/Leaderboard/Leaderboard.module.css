@@ -96,3 +96,24 @@
   font-size: 0.72rem;
   color: var(--text-soft);
 }
+
+.identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pseudo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playerTitle {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--brass-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

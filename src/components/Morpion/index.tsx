@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Modal from '../Modal';
 import MultiplayerMenu from '../MultiplayerMenu';
-import PieceSetPicker from '../PieceSetPicker';
+import Shop from '../Shop';
 import PlayerBar from '../PlayerBar';
 import Toast from '../Toast';
 import { useGameContext, type GameMode } from '@/context/GameContext';
@@ -484,7 +484,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
         </Modal>
       )}
 
-      {piecesOpen && <PieceSetPicker onClose={() => setPiecesOpen(false)} />}
+      {piecesOpen && <Shop onClose={() => setPiecesOpen(false)} />}
 
       {menuOpen && (
         <Modal title="Partie" onClose={() => setMenuOpen(false)}>

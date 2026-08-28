@@ -6,7 +6,7 @@
  * particulier à traiter — « pas de compte » — et non deux.
  *
  * Aucun gain n'est calculé ici. Le client demande, le serveur accorde : les
- * étoiles arrivent en réponse des fonctions distantes, jamais d'un calcul local
+ * cauris arrivent en réponse des fonctions distantes, jamais d'un calcul local
  * qu'il suffirait de contourner.
  */
 
@@ -22,6 +22,8 @@ import {
 } from '../account';
 import { EMPTY_PROFILE, type PlayerProfile } from '../profile';
 import { PIECE_SETS, DEFAULT_PIECE_SET, type PieceSetId } from '../pieceSets';
+import { BOARD_THEMES, DEFAULT_BOARD_THEME, type BoardThemeId } from '../boards';
+import { keepKnownItems, type ItemId, type Loadout } from '../shop';
 import type { HistoryEntry } from '../history';
 import type { RewardReason } from '../economy';
 
@@ -30,10 +32,13 @@ interface ProfileRow {
   id: string;
   handle: string;
   display_name: string;
-  stars: number;
+  coins: number;
   earned: number;
-  unlocked: string[] | null;
+  owned: string[] | null;
   piece_set: string;
+  board_theme: string;
+  frame: string | null;
+  title: string | null;
   last_visit_day: number;
   visit_streak: number;
   daily_last_number: number;
@@ -69,6 +74,11 @@ const KNOWN_SETS = new Set<string>(PIECE_SETS.map((set) => set.id));
 const asPieceSet = (value: string | null | undefined): PieceSetId =>
   value && KNOWN_SETS.has(value) ? (value as PieceSetId) : DEFAULT_PIECE_SET;
 
+const KNOWN_BOARDS = new Set<string>(BOARD_THEMES.map((theme) => theme.id));
+
+const asBoardTheme = (value: string | null | undefined): BoardThemeId =>
+  value && KNOWN_BOARDS.has(value) ? (value as BoardThemeId) : DEFAULT_BOARD_THEME;
+
 const rowToAccount = (row: ProfileRow): Account => ({
   id: row.id,
   handle: row.handle,
@@ -89,11 +99,11 @@ const rowsToHistory = (rows: readonly GameRow[]): HistoryEntry[] =>
 
 const rowToProfile = (row: ProfileRow, games: readonly GameRow[]): PlayerProfile => ({
   wallet: {
-    stars: row.stars,
+    coins: row.coins,
     earned: row.earned,
-    unlocked: (row.unlocked ?? ['cauri']).filter((id): id is PieceSetId =>
-      KNOWN_SETS.has(id),
-    ),
+    // Un article retiré du catalogue entre deux versions ne doit pas empêcher
+    // le profil de se charger.
+    owned: keepKnownItems(row.owned ?? []),
     lastVisitDay: row.last_visit_day,
     visitStreak: row.visit_streak,
   },
@@ -103,7 +113,12 @@ const rowToProfile = (row: ProfileRow, games: readonly GameRow[]): PlayerProfile
     streak: row.daily_streak,
     solvedCount: row.daily_solved_count,
   },
-  pieceSet: asPieceSet(row.piece_set),
+  loadout: {
+    pieces: asPieceSet(row.piece_set),
+    board: asBoardTheme(row.board_theme),
+    frame: (row.frame as Loadout['frame']) ?? null,
+    title: (row.title as Loadout['title']) ?? null,
+  },
 });
 
 /** Formate une erreur PostgREST ou inconnue pour qu'elle ne soit jamais affichée vide ({}) */
@@ -140,8 +155,9 @@ const explainDbError = (error: PostgrestError | Error, fallback: string): string
   console.error('[compte]', formatRemoteError(error), error);
   const message = 'message' in error && error.message ? error.message : formatRemoteError(error);
 
-  if (message.includes('solde insuffisant')) return 'Vous n’avez pas assez d’étoiles.';
-  if (message.includes('non debloque')) return 'Ce jeu de pions n’est pas encore à vous.';
+  if (message.includes('solde insuffisant')) return 'Vous n’avez pas assez de cauris.';
+  if (message.includes('non possede')) return 'Cet article n’est pas encore à vous.';
+  if (message.includes('article inconnu')) return 'Cet article n’existe plus.';
   if (message.includes('duplicate key') && message.includes('handle')) {
     return 'Ce pseudo est déjà pris.';
   }
@@ -250,20 +266,20 @@ export const signOut = async (): Promise<void> => {
 /** Réponse commune des fonctions qui accordent des étoiles. */
 export interface RewardOutcome {
   readonly rewards: readonly RewardReason[];
-  readonly stars: number;
+  readonly coins: number;
 }
 
-const asRewardOutcome = (payload: unknown, fallbackStars: number): RewardOutcome => {
-  const data = (payload ?? {}) as { rewards?: unknown; stars?: unknown };
+const asRewardOutcome = (payload: unknown, fallbackCoins: number): RewardOutcome => {
+  const data = (payload ?? {}) as { rewards?: unknown; coins?: unknown };
   return {
     rewards: Array.isArray(data.rewards) ? (data.rewards as RewardReason[]) : [],
-    stars: typeof data.stars === 'number' ? data.stars : fallbackStars,
+    coins: typeof data.coins === 'number' ? data.coins : fallbackCoins,
   };
 };
 
 /** Récompense la venue du jour. Le serveur décide de la date. */
 export const claimDailyVisit = async (
-  currentStars: number,
+  currentCoins: number,
 ): Promise<RewardOutcome | null> => {
   const supabase = getSupabase();
   if (!supabase) return null;
@@ -273,13 +289,13 @@ export const claimDailyVisit = async (
     console.error('[compte] venue du jour:', formatRemoteError(error), error);
     return null;
   }
-  return asRewardOutcome(data, currentStars);
+  return asRewardOutcome(data, currentCoins);
 };
 
 /** Consigne une partie terminée et récupère les étoiles accordées. */
 export const recordGameRemote = async (
   entry: HistoryEntry,
-  currentStars: number,
+  currentCoins: number,
 ): Promise<RewardOutcome | null> => {
   const supabase = getSupabase();
   if (!supabase) return null;
@@ -298,13 +314,13 @@ export const recordGameRemote = async (
     console.error('[compte] partie non enregistrée:', formatRemoteError(error), error);
     return null;
   }
-  return asRewardOutcome(data, currentStars);
+  return asRewardOutcome(data, currentCoins);
 };
 
 export const recordDailyRemote = async (
   number: number,
   solved: boolean,
-  currentStars: number,
+  currentCoins: number,
 ): Promise<RewardOutcome | null> => {
   const supabase = getSupabase();
   if (!supabase) return null;
@@ -318,36 +334,44 @@ export const recordDailyRemote = async (
     console.error('[compte] défi non enregistré:', formatRemoteError(error), error);
     return null;
   }
-  return asRewardOutcome(data, currentStars);
+  return asRewardOutcome(data, currentCoins);
 };
 
-export const unlockPieceSetRemote = async (
-  id: PieceSetId,
-): Promise<Outcome<{ stars: number; unlocked: PieceSetId[] }>> => {
+export const buyItemRemote = async (
+  id: ItemId,
+): Promise<Outcome<{ coins: number; owned: ItemId[] }>> => {
   const supabase = getSupabase();
   if (!supabase) return fail('Les comptes ne sont pas disponibles.');
 
-  const { data, error } = await supabase.rpc('unlock_piece_set', { p_set_id: id });
-  if (error) return fail(explainDbError(error, 'Le déblocage a échoué.'));
+  const { data, error } = await supabase.rpc('buy_item', { p_item: id });
+  if (error) return fail(explainDbError(error, 'L’achat a échoué.'));
 
-  const payload = (data ?? {}) as { stars?: number; unlocked?: string[] };
+  const payload = (data ?? {}) as { coins?: number; owned?: string[] };
   return {
     ok: true,
     value: {
-      stars: payload.stars ?? 0,
-      unlocked: (payload.unlocked ?? []).filter((set): set is PieceSetId =>
-        KNOWN_SETS.has(set),
-      ),
+      coins: payload.coins ?? 0,
+      owned: keepKnownItems(payload.owned ?? []),
     },
   };
 };
 
-export const setPieceSetRemote = async (id: PieceSetId): Promise<void> => {
+/**
+ * Enregistre ce que le joueur porte. Si l'envoi échoue, le choix reste
+ * appliqué sur cet appareil : c'est une préférence, pas un acquis, et rien ne
+ * justifie de la reprendre au joueur sous ses yeux.
+ */
+export const setLoadoutRemote = async (loadout: Loadout): Promise<void> => {
   const supabase = getSupabase();
   if (!supabase) return;
 
-  const { error } = await supabase.rpc('set_piece_set', { p_set_id: id });
-  if (error) console.error('[compte] choix de pions non conservé:', formatRemoteError(error), error);
+  const { error } = await supabase.rpc('set_loadout', {
+    p_pieces: loadout.pieces,
+    p_board: loadout.board,
+    p_frame: loadout.frame,
+    p_title: loadout.title,
+  });
+  if (error) console.error('[compte] tenue non conservée:', formatRemoteError(error), error);
 };
 
 /**
@@ -355,14 +379,14 @@ export const setPieceSetRemote = async (id: PieceSetId): Promise<void> => {
  * le second appel et plafonne les étoiles : il n'y a donc rien à vérifier ici.
  */
 export const importLocalProgress = async (
-  stars: number,
+  coins: number,
   games: readonly HistoryEntry[],
-): Promise<{ stars: number; games: number } | null> => {
+): Promise<{ coins: number; games: number } | null> => {
   const supabase = getSupabase();
   if (!supabase) return null;
 
   const { data, error } = await supabase.rpc('import_local_progress', {
-    p_stars: stars,
+    p_coins: coins,
     p_games: games.map((entry) => ({
       id: entry.id,
       game: entry.game,
@@ -379,8 +403,8 @@ export const importLocalProgress = async (
     return null;
   }
 
-  const payload = (data ?? {}) as { stars?: number; games?: number };
-  return { stars: payload.stars ?? 0, games: payload.games ?? 0 };
+  const payload = (data ?? {}) as { coins?: number; games?: number };
+  return { coins: payload.coins ?? 0, games: payload.games ?? 0 };
 };
 
 // --- Classement --------------------------------------------------------------
@@ -390,6 +414,9 @@ export interface LeaderboardRow {
   readonly handle: string;
   readonly wins: number;
   readonly played: number;
+  /** Titre et cadre portés : ce que le joueur a choisi de montrer. */
+  readonly title: string | null;
+  readonly frame: string | null;
 }
 
 export const fetchLeaderboard = async (): Promise<LeaderboardRow[]> => {
@@ -398,7 +425,7 @@ export const fetchLeaderboard = async (): Promise<LeaderboardRow[]> => {
 
   const { data, error } = await supabase
     .from('leaderboard')
-    .select('display_name, handle, wins, played')
+    .select('display_name, handle, wins, played, title, frame')
     .limit(50);
 
   if (error) {
@@ -406,14 +433,23 @@ export const fetchLeaderboard = async (): Promise<LeaderboardRow[]> => {
     return [];
   }
 
-  return ((data ?? []) as { display_name: string; handle: string; wins: number; played: number }[]).map(
-    (row) => ({
-      displayName: row.display_name,
-      handle: row.handle,
-      wins: Number(row.wins),
-      played: Number(row.played),
-    }),
-  );
+  type Row = {
+    display_name: string;
+    handle: string;
+    wins: number;
+    played: number;
+    title: string | null;
+    frame: string | null;
+  };
+
+  return ((data ?? []) as Row[]).map((row) => ({
+    displayName: row.display_name,
+    handle: row.handle,
+    wins: Number(row.wins),
+    played: Number(row.played),
+    title: row.title,
+    frame: row.frame,
+  }));
 };
 
 export { EMPTY_PROFILE };

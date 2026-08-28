@@ -7,6 +7,8 @@ import Leaderboard from '../Leaderboard';
 import { useAccount } from '@/context/AccountContext';
 import { useGameContext } from '@/context/GameContext';
 import { computeStats } from '@/lib/history';
+import { formatCoins } from '@/lib/economy';
+import { findFrame, findTitle } from '@/lib/shop';
 import { HANDLE_MAX } from '@/lib/account';
 import styles from './AccountPanel.module.css';
 
@@ -35,7 +37,7 @@ const AccountPanel: React.FC<AccountPanelProps> = ({ onClose }) => {
     signOut,
     hasProgressToKeep,
   } = useAccount();
-  const { wallet, history } = useGameContext();
+  const { wallet, history, loadout } = useGameContext();
 
   const [tab, setTab] = useState<Tab>('signin');
   const [handle, setHandle] = useState('');
@@ -46,6 +48,8 @@ const AccountPanel: React.FC<AccountPanelProps> = ({ onClose }) => {
   const [boardOpen, setBoardOpen] = useState(false);
 
   const stats = computeStats(history);
+  const cadre = findFrame(loadout.frame);
+  const titre = findTitle(loadout.title);
 
   // Changer d'onglet efface le reproche fait à la tentative précédente.
   useEffect(() => {
@@ -72,19 +76,29 @@ const AccountPanel: React.FC<AccountPanelProps> = ({ onClose }) => {
     return (
       <Modal title="Mon compte" onClose={onClose}>
         <div className={styles.identity}>
-          <span className={styles.avatar} aria-hidden="true">
+          {/* Le cadre acheté se voit ici et sur le classement : c'est tout
+              l'intérêt d'en posséder un. */}
+          <span
+            className={styles.avatar}
+            style={cadre ? { borderColor: cadre.color } : undefined}
+            aria-hidden="true"
+          >
             {account.displayName.slice(0, 1).toUpperCase()}
           </span>
           <div>
             <p className={styles.name}>{account.displayName}</p>
-            <p className={styles.handle}>@{account.handle}</p>
+            {titre ? (
+              <p className={styles.playerTitle}>{titre.label}</p>
+            ) : (
+              <p className={styles.handle}>@{account.handle}</p>
+            )}
           </div>
         </div>
 
         <ul className={styles.stats}>
           <li>
-            <span className={styles.figure}>{wallet.stars}</span>
-            <span className={styles.label}>étoiles</span>
+            <span className={styles.figure}>{formatCoins(wallet.coins)}</span>
+            <span className={styles.label}>cauris</span>
           </li>
           <li>
             <span className={styles.figure}>{stats.played}</span>
@@ -197,7 +211,7 @@ const AccountPanel: React.FC<AccountPanelProps> = ({ onClose }) => {
             />
             <span>
               Reprendre la progression de cet appareil — vos parties et vos
-              étoiles rejoignent le nouveau compte.
+              cauris rejoignent le nouveau compte.
             </span>
           </label>
         )}
@@ -224,7 +238,7 @@ const AccountPanel: React.FC<AccountPanelProps> = ({ onClose }) => {
       <p className={styles.note}>
         {tab === 'signup'
           ? 'Aucune adresse électronique demandée. Notez bien votre mot de passe : sans adresse, il ne peut pas être réinitialisé.'
-          : 'Un compte sert à retrouver ses étoiles et son historique sur un autre appareil. Jouer n’en demande pas.'}
+          : 'Un compte sert à retrouver ses cauris et son historique sur un autre appareil. Jouer n’en demande pas.'}
       </p>
     </Modal>
   );

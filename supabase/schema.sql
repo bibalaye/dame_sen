@@ -1,20 +1,21 @@
 -- =============================================================================
--- Dame Sen — schéma des comptes joueurs
+-- Dame Sen — schéma des comptes joueurs et de la boutique
 -- =============================================================================
 --
--- À exécuter une fois dans l'éditeur SQL de Supabase (SQL Editor > New query).
--- Le script est réexécutable : il ne détruit rien et ignore ce qui existe déjà.
+-- À exécuter dans l'éditeur SQL de Supabase (SQL Editor > New query).
+-- Le script est réexécutable : il ne détruit rien, migre ce qui doit l'être, et
+-- doit être rejoué après chaque mise à jour de ce fichier.
 --
 -- Principe de sécurité
 -- --------------------
 -- Le navigateur détient un jeton qui lui permet d'appeler l'API directement.
--- Si on laissait le client écrire son propre solde, se donner un million
--- d'étoiles tiendrait en une ligne dans la console. Toutes les tables sont donc
--- en lecture seule pour le joueur, et chaque gain passe par une fonction
+-- Si on laissait le client écrire son propre solde, se donner un million de
+-- cauris tiendrait en une ligne dans la console. Toutes les tables sont donc en
+-- lecture seule pour le joueur, et chaque gain passe par une fonction
 -- « security definer » qui applique le barème côté serveur.
 --
 -- Le barème est écrit deux fois : ici, et dans src/lib/economy.ts. Le client
--- l'affiche, le serveur en décide. Toute modification doit toucher les deux.
+-- l'affiche, le serveur en décide. Un test compare les deux (npm run test:sql).
 -- =============================================================================
 
 -- --- Profils ----------------------------------------------------------------
@@ -27,10 +28,19 @@ create table if not exists public.profiles (
   -- Pseudo tel que le joueur l'a écrit, avec sa casse et ses accents.
   display_name text not null,
 
-  stars integer not null default 0 check (stars >= 0),
+  coins integer not null default 0 check (coins >= 0),
   earned integer not null default 0 check (earned >= 0),
-  unlocked text[] not null default array['cauri'],
+
+  -- Articles possédés, toutes familles confondues : « pieces:sabar »,
+  -- « board:wax », « title:arene »… Une seule colonne évite une migration à
+  -- chaque nouvelle famille d'articles.
+  owned text[] not null default array[]::text[],
+
+  -- Ce que le joueur porte.
   piece_set text not null default 'cauri',
+  board_theme text not null default 'bois',
+  frame text,
+  title text,
 
   last_visit_day integer not null default 0,
   visit_streak integer not null default 0,
@@ -45,6 +55,43 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- --- Reprise des bases installées avant la boutique --------------------------
+
+-- « stars » est devenu « coins », et « unlocked » — qui ne listait que des jeux
+-- de pions — est devenu « owned », qui liste des articles préfixés par leur
+-- famille. Sans cette reprise, une base déjà en service perdrait les deux.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles' and column_name = 'stars'
+  ) then
+    alter table public.profiles rename column stars to coins;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles' and column_name = 'unlocked'
+  ) then
+    alter table public.profiles rename column unlocked to owned;
+
+    -- Les anciens identifiants n'avaient pas de famille : « sabar » désignait
+    -- forcément des pions.
+    update public.profiles
+      set owned = (
+        select coalesce(array_agg(
+          case when item like '%:%' then item else 'pieces:' || item end
+        ), array[]::text[])
+        from unnest(owned) as item
+        where item <> 'cauri'
+      );
+  end if;
+end $$;
+
+alter table public.profiles add column if not exists board_theme text not null default 'bois';
+alter table public.profiles add column if not exists frame text;
+alter table public.profiles add column if not exists title text;
 
 -- --- Parties ----------------------------------------------------------------
 
@@ -68,41 +115,102 @@ create table if not exists public.games (
 create index if not exists games_player_played_at_idx
   on public.games (player_id, played_at desc);
 
+-- --- Catalogue ---------------------------------------------------------------
+
+-- Les prix vivent dans une table, pas dans une fonction : ajouter un article ne
+-- doit pas demander de réécrire du code, et un test peut comparer cette table
+-- au catalogue de src/lib/shop.ts.
+create table if not exists public.catalog (
+  id text primary key,
+  kind text not null check (kind in ('pieces', 'board', 'feature', 'frame', 'title')),
+  price integer not null check (price >= 0)
+);
+
+insert into public.catalog (id, kind, price) values
+  -- Pions
+  ('pieces:cauri',      'pieces', 0),
+  ('pieces:sabar',      'pieces', 150),
+  ('pieces:teranga',    'pieces', 250),
+  ('pieces:sable',      'pieces', 250),
+  ('pieces:baobab',     'pieces', 500),
+  ('pieces:jetons',     'pieces', 500),
+  ('pieces:village',    'pieces', 700),
+  ('pieces:quilles',    'pieces', 700),
+  ('pieces:donjon',     'pieces', 900),
+  ('pieces:pirogue',    'pieces', 1400),
+  ('pieces:lutte',      'pieces', 1400),
+  ('pieces:goree',      'pieces', 1800),
+  ('pieces:casino',     'pieces', 1800),
+  ('pieces:ter',        'pieces', 3000),
+  ('pieces:drapeaux',   'pieces', 3000),
+  ('pieces:envol',      'pieces', 4000),
+  -- Plateaux
+  ('board:bois',        'board', 0),
+  ('board:sable',       'board', 200),
+  ('board:ebene',       'board', 600),
+  ('board:laterite',    'board', 800),
+  ('board:pierre',      'board', 800),
+  ('board:wax',         'board', 1600),
+  ('board:nuit',        'board', 1600),
+  ('board:laiton',      'board', 3500),
+  -- Cadres
+  ('frame:laiton',      'frame', 400),
+  ('frame:foret',       'frame', 400),
+  ('frame:indigo',      'frame', 1000),
+  ('frame:braise',      'frame', 2500),
+  -- Titres
+  ('title:teranga',     'title', 300),
+  ('title:arene',       'title', 700),
+  ('title:damier',      'title', 1500),
+  ('title:baol',        'title', 1500),
+  ('title:sans-pitie',  'title', 3000),
+  -- Fonctions
+  ('feature:indices',   'feature', 600),
+  ('feature:retour',    'feature', 1200)
+on conflict (id) do update set price = excluded.price, kind = excluded.kind;
+
 -- --- Verrouillage en écriture ------------------------------------------------
 
 alter table public.profiles enable row level security;
 alter table public.games enable row level security;
+alter table public.catalog enable row level security;
 
--- Un joueur lit son profil entier.
 drop policy if exists "profil visible par son proprietaire" on public.profiles;
 create policy "profil visible par son proprietaire"
   on public.profiles for select
   using (auth.uid() = id);
-
--- Aucune politique d'insert, d'update ni de delete sur profiles ni sur games :
--- l'absence de politique vaut refus. Tout passe par les fonctions ci-dessous.
 
 drop policy if exists "parties visibles par leur joueur" on public.games;
 create policy "parties visibles par leur joueur"
   on public.games for select
   using (auth.uid() = player_id);
 
+-- Le catalogue se lit librement : les prix s'affichent avant tout achat.
+drop policy if exists "catalogue lisible" on public.catalog;
+create policy "catalogue lisible"
+  on public.catalog for select
+  using (true);
+
+-- Aucune politique d'insert, d'update ni de delete nulle part : l'absence de
+-- politique vaut refus. Tout passe par les fonctions ci-dessous.
+
 -- --- Classement --------------------------------------------------------------
 
 -- Une vue n'expose que le nécessaire : pas de solde, pas d'identifiant de
--- compte. Elle est en « security invoker » désactivé afin de rester lisible par
--- tous les joueurs connectés, sans ouvrir la table des profils.
+-- compte. Le titre en fait partie — c'est ce que le joueur a choisi de montrer.
 create or replace view public.leaderboard
 with (security_invoker = off) as
   select
     p.display_name,
     p.handle,
+    p.title,
+    p.frame,
     count(*) filter (where g.result = 'win') as wins,
     count(*) as played,
     p.daily_streak
   from public.profiles p
   join public.games g on g.player_id = p.id
-  group by p.id, p.display_name, p.handle, p.daily_streak
+  group by p.id, p.display_name, p.handle, p.title, p.frame, p.daily_streak
   having count(*) >= 5
   order by wins desc, played asc
   limit 100;
@@ -127,27 +235,18 @@ as $$
   end;
 $$;
 
-create or replace function public.piece_set_price(set_id text)
+/* Prix d'un article. Renvoie null pour un identifiant inconnu : l'appelant doit
+   refuser plutôt que d'offrir l'article. */
+create or replace function public.item_price(p_item text)
 returns integer
 language sql
-immutable
+stable
 as $$
-  select case set_id
-    when 'cauri'   then 0
-    when 'sabar'   then 300
-    when 'teranga' then 600
-    when 'baobab'  then 1000
-    when 'donjon'  then 1500
-    when 'jetons'  then 2000
-    else null
-  end;
+  select price from public.catalog where id = p_item;
 $$;
 
 -- --- Création du profil ------------------------------------------------------
 
--- Appelée juste après l'inscription. Le pseudo canonique vient déjà de
--- l'adresse interne fabriquée par le client, mais on ne s'y fie pas : c'est
--- l'unicité de la colonne qui tranche.
 create or replace function public.create_profile(
   p_handle text,
   p_display_name text
@@ -179,7 +278,7 @@ $$;
 -- --- Venue du jour -----------------------------------------------------------
 
 -- Le jour est calculé ici, pas chez le client : avancer l'horloge de son
--- téléphone ne doit pas distribuer d'étoiles.
+-- téléphone ne doit pas distribuer de cauris.
 create or replace function public.claim_daily_visit()
 returns jsonb
 language plpgsql
@@ -206,7 +305,7 @@ begin
 
   -- Déjà passé aujourd'hui : rien à donner.
   if v_profile.last_visit_day = v_today then
-    return jsonb_build_object('rewards', v_rewards, 'stars', v_profile.stars);
+    return jsonb_build_object('rewards', v_rewards, 'coins', v_profile.coins);
   end if;
 
   if v_profile.last_visit_day = v_today - 1 then
@@ -227,7 +326,7 @@ begin
   update public.profiles
     set last_visit_day = v_today,
         visit_streak = v_streak,
-        stars = stars + v_gain,
+        coins = coins + v_gain,
         earned = earned + v_gain,
         updated_at = now()
     where id = v_uid
@@ -235,7 +334,7 @@ begin
 
   return jsonb_build_object(
     'rewards', v_rewards,
-    'stars', v_profile.stars,
+    'coins', v_profile.coins,
     'visitStreak', v_streak
   );
 end;
@@ -265,7 +364,7 @@ declare
   v_rewards text[] := array['played'];
   v_gain integer := 0;
   v_reason text;
-  v_stars integer;
+  v_coins integer;
 begin
   if v_uid is null then
     raise exception 'non authentifie';
@@ -281,15 +380,15 @@ begin
   -- Renvoyer la même partie deux fois ne rapporte rien : sans cela, un appel
   -- rejoué par le réseau créditerait autant de fois qu'il est répété.
   if v_inserted = 0 then
-    select stars into v_stars from public.profiles where id = v_uid;
-    return jsonb_build_object('rewards', array[]::text[], 'stars', v_stars,
+    select coins into v_coins from public.profiles where id = v_uid;
+    return jsonb_build_object('rewards', array[]::text[], 'coins', v_coins,
                               'duplicate', true);
   end if;
 
   -- Le défi du jour a son propre barème, réglé ailleurs.
   if p_mode = 'daily' then
-    select stars into v_stars from public.profiles where id = v_uid;
-    return jsonb_build_object('rewards', array[]::text[], 'stars', v_stars);
+    select coins into v_coins from public.profiles where id = v_uid;
+    return jsonb_build_object('rewards', array[]::text[], 'coins', v_coins);
   end if;
 
   if p_result = 'win' then
@@ -315,13 +414,13 @@ begin
   end loop;
 
   update public.profiles
-    set stars = stars + v_gain,
+    set coins = coins + v_gain,
         earned = earned + v_gain,
         updated_at = now()
     where id = v_uid
-    returning stars into v_stars;
+    returning coins into v_coins;
 
-  return jsonb_build_object('rewards', v_rewards, 'stars', v_stars,
+  return jsonb_build_object('rewards', v_rewards, 'coins', v_coins,
                             'streak', coalesce(v_streak, 0));
 end;
 $$;
@@ -352,7 +451,7 @@ begin
 
   -- Le même défi ne compte qu'une fois, quel que soit le nombre d'essais.
   if v_profile.daily_last_number = p_number then
-    return jsonb_build_object('rewards', v_rewards, 'stars', v_profile.stars,
+    return jsonb_build_object('rewards', v_rewards, 'coins', v_profile.coins,
                               'dailyStreak', v_profile.daily_streak);
   end if;
 
@@ -373,20 +472,20 @@ begin
     set daily_last_number = p_number,
         daily_streak = v_streak,
         daily_solved_count = daily_solved_count + (case when p_solved then 1 else 0 end),
-        stars = stars + v_gain,
+        coins = coins + v_gain,
         earned = earned + v_gain,
         updated_at = now()
     where id = v_uid
     returning * into v_profile;
 
-  return jsonb_build_object('rewards', v_rewards, 'stars', v_profile.stars,
+  return jsonb_build_object('rewards', v_rewards, 'coins', v_profile.coins,
                             'dailyStreak', v_streak);
 end;
 $$;
 
--- --- Déblocage et choix des pions --------------------------------------------
+-- --- Boutique ----------------------------------------------------------------
 
-create or replace function public.unlock_piece_set(p_set_id text)
+create or replace function public.buy_item(p_item text)
 returns jsonb
 language plpgsql
 security definer
@@ -395,36 +494,45 @@ as $$
 declare
   v_uid uuid := auth.uid();
   v_profile public.profiles;
-  v_price integer := public.piece_set_price(p_set_id);
+  v_price integer := public.item_price(p_item);
 begin
   if v_uid is null then
     raise exception 'non authentifie';
   end if;
   if v_price is null then
-    raise exception 'jeu de pions inconnu';
+    raise exception 'article inconnu';
   end if;
 
   select * into v_profile from public.profiles where id = v_uid for update;
 
-  if p_set_id = any(v_profile.unlocked) then
-    return jsonb_build_object('stars', v_profile.stars, 'unlocked', v_profile.unlocked);
+  -- Déjà acquis, ou offert : on ne débite rien et on ne se plaint pas.
+  if p_item = any(v_profile.owned) or v_price = 0 then
+    return jsonb_build_object('coins', v_profile.coins, 'owned', v_profile.owned);
   end if;
-  if v_profile.stars < v_price then
+
+  if v_profile.coins < v_price then
     raise exception 'solde insuffisant';
   end if;
 
   update public.profiles
-    set stars = stars - v_price,
-        unlocked = array_append(unlocked, p_set_id),
+    set coins = coins - v_price,
+        owned = array_append(owned, p_item),
         updated_at = now()
     where id = v_uid
     returning * into v_profile;
 
-  return jsonb_build_object('stars', v_profile.stars, 'unlocked', v_profile.unlocked);
+  return jsonb_build_object('coins', v_profile.coins, 'owned', v_profile.owned);
 end;
 $$;
 
-create or replace function public.set_piece_set(p_set_id text)
+/* Change ce que le joueur porte. Chaque valeur nulle laisse le réglage en
+   place : on peut ne changer que le plateau sans toucher au reste. */
+create or replace function public.set_loadout(
+  p_pieces text,
+  p_board text,
+  p_frame text,
+  p_title text
+)
 returns jsonb
 language plpgsql
 security definer
@@ -438,29 +546,55 @@ begin
     raise exception 'non authentifie';
   end if;
 
-  select * into v_profile from public.profiles where id = v_uid;
+  select * into v_profile from public.profiles where id = v_uid for update;
 
-  -- On ne met en jeu que ce qui est acquis : sans ce contrôle, le déblocage ne
-  -- servirait à rien.
-  if not (p_set_id = any(v_profile.unlocked)) then
-    raise exception 'jeu de pions non debloque';
+  -- On ne porte que ce qu'on possède : sans ce contrôle, l'achat ne servirait
+  -- à rien. Les articles offerts ne figurent pas dans l'inventaire, d'où la
+  -- comparaison de prix.
+  if p_pieces is not null
+     and not ('pieces:' || p_pieces = any(v_profile.owned))
+     and coalesce(public.item_price('pieces:' || p_pieces), -1) <> 0 then
+    raise exception 'article non possede';
+  end if;
+
+  if p_board is not null
+     and not ('board:' || p_board = any(v_profile.owned))
+     and coalesce(public.item_price('board:' || p_board), -1) <> 0 then
+    raise exception 'article non possede';
+  end if;
+
+  if p_frame is not null and not ('frame:' || p_frame = any(v_profile.owned)) then
+    raise exception 'article non possede';
+  end if;
+
+  if p_title is not null and not ('title:' || p_title = any(v_profile.owned)) then
+    raise exception 'article non possede';
   end if;
 
   update public.profiles
-    set piece_set = p_set_id, updated_at = now()
-    where id = v_uid;
+    set piece_set = coalesce(p_pieces, piece_set),
+        board_theme = coalesce(p_board, board_theme),
+        frame = p_frame,
+        title = p_title,
+        updated_at = now()
+    where id = v_uid
+    returning * into v_profile;
 
-  return jsonb_build_object('pieceSet', p_set_id);
+  return jsonb_build_object(
+    'pieces', v_profile.piece_set,
+    'board', v_profile.board_theme,
+    'frame', v_profile.frame,
+    'title', v_profile.title
+  );
 end;
 $$;
 
 -- --- Reprise d'une progression hors compte ------------------------------------
 
 -- Le contenu du navigateur se modifie à la main. Le solde repris est donc
--- plafonné, et l'opération refusée au second appel. Rien d'argent réel n'étant
--- en jeu, ce garde-fou simple vaut mieux qu'un dispositif compliqué.
+-- plafonné, et l'opération refusée au second appel.
 create or replace function public.import_local_progress(
-  p_stars integer,
+  p_coins integer,
   p_games jsonb
 )
 returns jsonb
@@ -472,7 +606,7 @@ declare
   v_uid uuid := auth.uid();
   v_profile public.profiles;
   v_cap constant integer := 1000;
-  v_stars integer := least(greatest(coalesce(p_stars, 0), 0), v_cap);
+  v_coins integer := least(greatest(coalesce(p_coins, 0), 0), v_cap);
   v_count integer := 0;
 begin
   if v_uid is null then
@@ -512,34 +646,39 @@ begin
   get diagnostics v_count = row_count;
 
   update public.profiles
-    set stars = stars + v_stars,
-        earned = earned + v_stars,
+    set coins = coins + v_coins,
+        earned = earned + v_coins,
         imported = true,
         updated_at = now()
     where id = v_uid
     returning * into v_profile;
 
-  return jsonb_build_object('imported', true, 'stars', v_profile.stars,
+  return jsonb_build_object('imported', true, 'coins', v_profile.coins,
                             'games', v_count);
 end;
 $$;
 
 -- --- Droits ------------------------------------------------------------------
 
--- Seuls les comptes connectés appellent ces fonctions. La clé publique du site
--- ne donne rien de plus qu'un compte anonyme.
+-- Les anciennes fonctions, remplacées par buy_item et set_loadout.
+drop function if exists public.unlock_piece_set(text);
+drop function if exists public.set_piece_set(text);
+drop function if exists public.piece_set_price(text);
+
 revoke all on function public.create_profile(text, text) from public, anon;
 revoke all on function public.claim_daily_visit() from public, anon;
 revoke all on function public.record_game(text, text, text, text, text, text, bigint) from public, anon;
 revoke all on function public.record_daily(integer, boolean) from public, anon;
-revoke all on function public.unlock_piece_set(text) from public, anon;
-revoke all on function public.set_piece_set(text) from public, anon;
+revoke all on function public.buy_item(text) from public, anon;
+revoke all on function public.set_loadout(text, text, text, text) from public, anon;
 revoke all on function public.import_local_progress(integer, jsonb) from public, anon;
 
 grant execute on function public.create_profile(text, text) to authenticated;
 grant execute on function public.claim_daily_visit() to authenticated;
 grant execute on function public.record_game(text, text, text, text, text, text, bigint) to authenticated;
 grant execute on function public.record_daily(integer, boolean) to authenticated;
-grant execute on function public.unlock_piece_set(text) to authenticated;
-grant execute on function public.set_piece_set(text) to authenticated;
+grant execute on function public.buy_item(text) to authenticated;
+grant execute on function public.set_loadout(text, text, text, text) to authenticated;
 grant execute on function public.import_local_progress(integer, jsonb) to authenticated;
+
+grant select on public.catalog to anon, authenticated;

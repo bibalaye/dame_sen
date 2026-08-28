@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import StatsPanel from '../StatsPanel';
-import PieceSetPicker from '../PieceSetPicker';
+import Shop from '../Shop';
 import RulesPicker from '../RulesPicker';
 import AccountPanel from '../AccountPanel';
 import { computeStats } from '@/lib/history';
@@ -13,6 +13,7 @@ import { TIME_CONTROLS, type TimeControl } from '@/lib/clock';
 import { MORPION_OPPONENTS, type MorpionVariant } from '@/lib/morpion';
 import { DEFAULT_RULES, type RuleSet } from '@/lib/engine';
 import type { Difficulty } from '@/lib/ai';
+import { formatCoins } from '@/lib/economy';
 import { play } from '@/lib/sound';
 import styles from './HomeScreen.module.css';
 
@@ -125,7 +126,7 @@ const HomeScreen: React.FC = () => {
   const { account } = useAccount();
   const [accountOpen, setAccountOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
-  const [piecesOpen, setPiecesOpen] = useState(false);
+  const [shopOpen, setShopOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [rules, setRules] = useState<RuleSet>(DEFAULT_RULES);
 
@@ -351,15 +352,17 @@ const HomeScreen: React.FC = () => {
             <button
               type="button"
               className={styles.chip}
-              onClick={() => setPiecesOpen(true)}
+              onClick={() => setShopOpen(true)}
             >
               <span className={styles.chipPieces}>
                 <Image src={pieceSet.light} alt="" width={22} height={22} />
                 <Image src={pieceSet.dark} alt="" width={22} height={22} />
               </span>
               <span className={styles.chipText}>
-                {pieceSet.name}
-                <span className={styles.chipStars}>{wallet.stars} ★</span>
+                Boutique
+                <span className={styles.chipStars}>
+                  {formatCoins(wallet.coins)} cauris
+                </span>
               </span>
             </button>
 
@@ -382,7 +385,7 @@ const HomeScreen: React.FC = () => {
 
       {accountOpen && <AccountPanel onClose={() => setAccountOpen(false)} />}
       {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
-      {piecesOpen && <PieceSetPicker onClose={() => setPiecesOpen(false)} />}
+      {shopOpen && <Shop onClose={() => setShopOpen(false)} />}
       {rulesOpen && (
         <RulesPicker
           rules={rules}

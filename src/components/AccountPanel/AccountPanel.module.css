@@ -205,3 +205,17 @@
 .action + .action {
   margin-top: 10px;
 }
+
+/* Le cadre acheté remplace la bordure neutre de l'initiale. */
+.avatar {
+  border: 3px solid transparent;
+}
+
+/* Le titre prend la place du pseudo technique : c'est ce qu'on a choisi de
+   montrer, et il vaut mieux qu'un identifiant. */
+.playerTitle {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--brass-ink);
+}
