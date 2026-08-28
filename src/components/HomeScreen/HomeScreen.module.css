@@ -1,143 +1,142 @@
 /*
- * Écran de lancement.
+ * Écran d'accueil.
  *
- * Il assume un fond profond dans les deux thèmes : c'est un seuil, pas un
- * formulaire. La hiérarchie est portée par l'échelle typographique et par les
- * aperçus de plateau — le jeu se choisit sur image — plutôt que par une pile de
- * cartes de même poids.
+ * Les réglages étaient posés à même le fond, chacun dans sa boîte : beaucoup de
+ * noir, aucune structure, et un grand vide sous le dernier bloc. Tout tient
+ * désormais dans une fiche unique posée sur la table — la hiérarchie vient du
+ * contenant, pas d'une pile de cartes de même poids.
  */
 .screen {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  /* Un bois profond plutôt qu'un noir : la table sur laquelle on pose la fiche. */
   background:
-    radial-gradient(90% 55% at 50% 0%, rgba(201, 146, 46, 0.16), transparent 70%),
-    linear-gradient(168deg, #1d1207 0%, #120c06 55%, #0b0704 100%);
-  color: #f2e8d6;
+    radial-gradient(120% 60% at 50% 0%, rgba(201, 146, 46, 0.22), transparent 65%),
+    linear-gradient(170deg, #3a2712 0%, #2a1c0e 55%, #1d1309 100%);
   padding-top: env(safe-area-inset-top);
 }
 
 .inner {
   flex: 1;
   width: 100%;
-  max-width: 460px;
+  max-width: 440px;
   margin: 0 auto;
-  padding: 26px 20px 24px;
+  padding: 22px 16px 8px;
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  gap: 18px;
 }
 
 /* --- Titre ---------------------------------------------------------------- */
 
 .header {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  text-align: center;
 }
 
 .brand {
-  font-family: var(--font-display);
-  font-size: 0.68rem;
+  margin: 0 0 6px;
+  font-size: 0.64rem;
   font-weight: 800;
-  letter-spacing: 0.28em;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
   color: var(--brass);
 }
 
 .title {
-  font-family: var(--font-display);
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  font-size: clamp(2.1rem, 9vw, 2.9rem);
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 5.5vw, 1.8rem);
   font-weight: 800;
-  line-height: 0.96;
-  letter-spacing: -0.035em;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
   color: #fdf6e8;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
 }
 
-.titleAccent {
-  color: var(--brass);
-}
+/* --- La fiche de réglages -------------------------------------------------- */
 
-/* --- Sections ------------------------------------------------------------- */
-
-.section {
+.panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  filter: drop-shadow(0 16px 32px rgba(0, 0, 0, 0.5));
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .label {
   margin: 0;
-  font-size: 0.66rem;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
   font-weight: 800;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(242, 232, 214, 0.42);
+  color: var(--text-soft);
 }
 
 .hint {
   margin: 0;
-  font-size: 0.82rem;
-  color: rgba(242, 232, 214, 0.55);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--text-soft);
 }
 
-/* --- Choix du jeu, sur aperçu --------------------------------------------- */
+/* --- Choix du jeu ---------------------------------------------------------- */
 
 .games {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 8px;
 }
 
 .game {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 16px 12px 14px;
-  border: 1px solid rgba(242, 232, 214, 0.14);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.035);
-  color: inherit;
+  gap: 6px;
+  padding: 12px 8px 10px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
   font-family: inherit;
   cursor: pointer;
-  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
 }
 
 .game:hover {
-  transform: translateY(-2px);
-  border-color: rgba(201, 146, 46, 0.5);
+  border-color: var(--brass-ink);
 }
 
 .gameOn {
-  border-color: var(--brass);
-  background: rgba(201, 146, 46, 0.14);
-  box-shadow: 0 10px 26px -14px rgba(201, 146, 46, 0.9);
+  border-color: var(--brass-ink);
+  background: color-mix(in srgb, var(--brass-ink) 12%, var(--surface));
 }
 
 .gameName {
   font-family: var(--font-display);
-  font-size: 1.02rem;
+  font-size: 0.94rem;
   font-weight: 800;
-  letter-spacing: -0.01em;
 }
 
 .gameDetail {
-  font-size: 0.72rem;
-  color: rgba(242, 232, 214, 0.5);
+  font-size: 0.68rem;
+  color: var(--text-soft);
 }
 
 /* Aperçus de plateau, dessinés en grille. */
 .preview {
   display: grid;
   gap: 1px;
-  width: 68px;
-  height: 68px;
+  width: 60px;
+  height: 60px;
   padding: 3px;
-  border-radius: 6px;
+  border-radius: 5px;
   background: linear-gradient(148deg, #6b4a2c, #3d2917);
 }
 
@@ -177,16 +176,16 @@
 }
 
 .previewRound {
-  width: 62%;
-  height: 62%;
+  width: 60%;
+  height: 60%;
   border-radius: 50%;
   border: 2.5px solid #f3ead7;
 }
 
 .previewCross {
-  width: 66%;
-  height: 66%;
   position: relative;
+  width: 64%;
+  height: 64%;
 }
 
 .previewCross::before,
@@ -209,51 +208,48 @@
   transform: translateY(-50%) rotate(-45deg);
 }
 
-/* --- Sélecteurs compacts --------------------------------------------------- */
+/* --- Sélecteurs à segments -------------------------------------------------- */
 
 .segments {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   padding: 3px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.34);
-  border: 1px solid rgba(242, 232, 214, 0.1);
+  border-radius: 10px;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
 }
 
 .segment {
   flex: 1;
-  padding: 10px 6px;
+  padding: 9px 4px;
   border: none;
-  border-radius: 9px;
+  border-radius: 7px;
   background: transparent;
-  color: rgba(242, 232, 214, 0.62);
+  color: var(--text-soft);
   font-family: inherit;
-  font-size: 0.84rem;
+  font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
-  transition: background-color 0.18s ease, color 0.18s ease;
+  transition: background-color 0.16s ease, color 0.16s ease;
 }
 
 .segment:hover {
-  color: #f2e8d6;
+  color: var(--text);
 }
 
 .segmentOn {
-  background: var(--brass);
-  color: #1c1204;
-  box-shadow: 0 4px 12px -4px rgba(201, 146, 46, 0.8);
+  background: var(--brass-ink);
+  color: #fff6e2;
 }
 
-/* --- Adversaires, en rail horizontal --------------------------------------- */
+/* --- Adversaires ------------------------------------------------------------ */
 
 .rail {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   overflow-x: auto;
-  padding-bottom: 4px;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
+  padding-bottom: 2px;
   scrollbar-width: none;
 }
 
@@ -262,111 +258,139 @@
 }
 
 .card {
-  flex: 0 0 auto;
-  width: 132px;
-  scroll-snap-align: start;
+  flex: 1 0 auto;
+  min-width: 96px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 12px 13px 13px;
-  text-align: left;
-  border: 1px solid rgba(242, 232, 214, 0.14);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
-  color: inherit;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 8px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
   font-family: inherit;
   cursor: pointer;
-  transition: border-color 0.18s ease, background-color 0.18s ease;
+  transition: border-color 0.16s ease, background-color 0.16s ease;
 }
 
 .card:hover {
-  border-color: rgba(201, 146, 46, 0.5);
+  border-color: var(--brass-ink);
 }
 
 .cardOn {
-  border-color: var(--brass);
-  background: rgba(201, 146, 46, 0.14);
+  border-color: var(--brass-ink);
+  background: color-mix(in srgb, var(--brass-ink) 12%, var(--surface));
 }
 
-/* Jauge de niveau : quatre plots dont on allume les premiers. */
-.pips {
+/* Le niveau se lit en étoiles : plus parlant qu'une suite de tirets. */
+.stars {
   display: flex;
-  gap: 3px;
-  margin-bottom: 2px;
-}
-
-.pip,
-.pipOn {
-  width: 14px;
-  height: 3px;
-  border-radius: 99px;
-}
-
-.pip {
-  background: rgba(242, 232, 214, 0.16);
-}
-
-.pipOn {
-  background: var(--brass);
+  gap: 1px;
 }
 
 .cardName {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* --- Réglages secondaires --------------------------------------------------- */
+
+.footRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-sunk);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.16s ease;
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--brass-ink);
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chipPieces {
+  display: flex;
+  gap: 1px;
+  padding: 3px 5px;
+  border-radius: 6px;
+  background: linear-gradient(148deg, #b99a72, #a9885e);
+}
+
+.chipFigure {
   font-family: var(--font-display);
-  font-size: 0.92rem;
+  font-size: 1.1rem;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--brass-ink);
 }
 
-.cardTag {
-  font-size: 0.72rem;
-  line-height: 1.3;
-  color: rgba(242, 232, 214, 0.5);
+.chipText {
+  flex: 1;
+  text-align: left;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-soft);
 }
 
-/* --- Lancement ------------------------------------------------------------- */
+/* --- Lancement -------------------------------------------------------------- */
 
 .launcher {
   position: sticky;
   bottom: 0;
-  padding: 14px 20px calc(18px + env(safe-area-inset-bottom));
-  background: linear-gradient(to top, #0b0704 55%, rgba(11, 7, 4, 0));
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, #1d1309 55%, rgba(29, 19, 9, 0));
 }
 
 .play {
   width: 100%;
-  max-width: 420px;
+  max-width: 408px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  min-height: 64px;
-  font-size: 1.05rem;
-  letter-spacing: 0.02em;
+  min-height: 62px;
+  font-size: 1rem;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  filter: drop-shadow(0 10px 20px rgba(224, 166, 58, 0.35));
-}
-
-.playIcon {
-  font-size: 0.9em;
 }
 
 .game:focus-visible,
 .segment:focus-visible,
 .card:focus-visible,
-.play:focus-visible {
-  outline: 3px solid #f0d9a4;
-  outline-offset: 3px;
+.chip:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
 @media (min-width: 640px) {
   .inner {
-    padding-top: 44px;
-    gap: 30px;
+    padding-top: 36px;
   }
 
   .preview {
-    width: 84px;
-    height: 84px;
+    width: 68px;
+    height: 68px;
   }
 }
 
@@ -374,111 +398,7 @@
   .game,
   .segment,
   .card,
-  .play {
+  .chip {
     transition: none;
   }
-}
-
-/* Palmarès : un rappel discret qui ouvre l'historique complet. */
-.record {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  padding: 9px 14px;
-  border: 1px solid rgba(242, 232, 214, 0.14);
-  border-radius: 50px;
-  background: rgba(255, 255, 255, 0.035);
-  color: inherit;
-  font-family: inherit;
-  cursor: pointer;
-  align-self: flex-start;
-  transition: border-color 0.18s ease;
-}
-
-.record:hover {
-  border-color: rgba(201, 146, 46, 0.5);
-}
-
-.record:focus-visible {
-  outline: 3px solid #f0d9a4;
-  outline-offset: 3px;
-}
-
-.recordFigure {
-  font-size: 1rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--brass);
-}
-
-.recordLabel {
-  font-size: 0.78rem;
-  color: rgba(242, 232, 214, 0.6);
-}
-
-.recordStreak {
-  padding: 2px 8px;
-  border-radius: 50px;
-  background: rgba(201, 146, 46, 0.2);
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--brass);
-}
-
-.recordMore {
-  color: rgba(242, 232, 214, 0.4);
-  font-size: 1.1rem;
-  line-height: 1;
-}
-
-/* Choix des pions : l'aperçu se lit avant le nom. */
-.pieces {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  border: 1px solid rgba(242, 232, 214, 0.14);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.035);
-  color: inherit;
-  font-family: inherit;
-  cursor: pointer;
-  transition: border-color 0.18s ease;
-}
-
-.pieces:hover {
-  border-color: rgba(201, 146, 46, 0.5);
-}
-
-.pieces:focus-visible {
-  outline: 3px solid #f0d9a4;
-  outline-offset: 3px;
-}
-
-.piecesPreview {
-  display: flex;
-  gap: 2px;
-  padding: 4px 6px;
-  border-radius: 8px;
-  background: linear-gradient(148deg, #b99a72, #a9885e);
-}
-
-.piecesPreview img {
-  width: 26px;
-  height: 26px;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 2px rgba(20, 12, 4, 0.5));
-}
-
-.piecesName {
-  flex: 1;
-  text-align: left;
-  font-size: 0.94rem;
-  font-weight: 700;
-}
-
-.piecesMore {
-  font-size: 0.76rem;
-  color: rgba(242, 232, 214, 0.5);
 }
