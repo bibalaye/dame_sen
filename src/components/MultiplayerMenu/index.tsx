@@ -16,6 +16,7 @@ const MultiplayerMenu: React.FC = () => {
     invitedRoom,
     isConnecting,
     connectionError,
+    startGame,
   } = useGameContext();
 
   const [username, setUsername] = useState('');
@@ -64,9 +65,25 @@ const MultiplayerMenu: React.FC = () => {
   };
 
   const status = connectionError ? (
-    <p className={styles.error} role="alert">
-      {connectionError}
-    </p>
+    <div className={styles.error} role="alert">
+      <p className={styles.errorText}>{connectionError}</p>
+      <div className={styles.errorActions}>
+        <button
+          type="button"
+          className={`${styles.btn} ${styles.backBtn}`}
+          onClick={() => startGame({ kind: 'morpion', mode: 'pass' })}
+        >
+          Jouer à deux ici
+        </button>
+        <button
+          type="button"
+          className={`${styles.btn} ${styles.backBtn}`}
+          onClick={goHome}
+        >
+          Accueil
+        </button>
+      </div>
+    </div>
   ) : isConnecting ? (
     <p className={styles.connecting}>Connexion au serveur de jeu…</p>
   ) : null;

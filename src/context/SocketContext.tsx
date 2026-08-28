@@ -41,6 +41,27 @@ const resolveServerUrl = (): string => {
 /** Délai au-delà duquel on considère le serveur injoignable. */
 const CONNECT_TIMEOUT_MS = 8000;
 
+/**
+ * Le jeu en ligne repose sur une connexion permanente (WebSocket), que les
+ * hébergements « sans serveur » — Vercel, Netlify et consorts — ne fournissent
+ * pas : ils exécutent des fonctions éphémères, sans état partagé entre deux
+ * requêtes. Le service temps réel doit donc tourner ailleurs, et son adresse
+ * être donnée par `NEXT_PUBLIC_SOCKET_URL`.
+ *
+ * Quand la page est servie par `server.js` lui-même, l'origine suffit et la
+ * variable est inutile : on ne peut donc pas trancher à la compilation, mais on
+ * sait dire pourquoi la connexion échoue.
+ */
+const realtimeHint = (): string => {
+  if (process.env.NODE_ENV === 'development') {
+    return 'Le serveur de jeu ne répond pas. Lancez « npm run server » dans un second terminal, ou jouez à deux sur cet appareil.';
+  }
+  if (!process.env.NEXT_PUBLIC_SOCKET_URL) {
+    return 'Le jeu en ligne n’est pas disponible sur cet hébergement : il demande un serveur temps réel, qui doit être déployé à part. Les autres modes fonctionnent normalement.';
+  }
+  return 'Le serveur de jeu est injoignable pour le moment. Réessayez dans un instant, ou jouez à deux sur cet appareil.';
+};
+
 // Define the shape of our socket context
 interface SocketContextType {
   socket: Socket | null;
@@ -104,9 +125,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
       const timeout = setTimeout(() => {
         if (!socketInstance.connected) {
-          setError(
-            'Le serveur de jeu ne répond pas. En développement, lancez « npm run server ».',
-          );
+          setError(realtimeHint());
         }
       }, CONNECT_TIMEOUT_MS);
 
@@ -120,8 +139,14 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         setIsConnected(false);
       });
 
+      let failures = 0;
       socketInstance.on('connect_error', (cause) => {
         setIsConnected(false);
+        // Deux échecs consécutifs : inutile de faire patienter huit secondes.
+        if (++failures >= 2) {
+          clearTimeout(timeout);
+          setError(realtimeHint());
+        }
         console.warn('Connexion au serveur de jeu impossible :', cause.message);
       });
 

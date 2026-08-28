@@ -28,12 +28,54 @@ Si vous préférez garder le rechargement à chaud de `npm run dev`, lancez les
 deux commandes en parallèle : le client détecte qu'il n'est pas servi par le
 port temps réel et se connecte automatiquement au port 5000.
 
-Pour un serveur hébergé ailleurs, renseignez son adresse :
+## Mise en ligne
 
-```bash
-# .env.local
-NEXT_PUBLIC_SOCKET_URL=https://exemple.com
-```
+Les modes **solo**, **à deux sur un appareil** et **défi du jour** tournent
+partout, y compris sur un hébergement statique.
+
+Le mode **en ligne**, lui, demande une connexion permanente (WebSocket).
+
+> **Vercel, Netlify et les hébergements « sans serveur » ne peuvent pas
+> l'héberger.** Ils exécutent des fonctions éphémères, sans état partagé d'une
+> requête à l'autre : `server.js` n'y tourne pas, et les salles gardées en
+> mémoire ne survivraient pas entre deux appels.
+
+Le jeu reste parfaitement déployable sur Vercel — seul le mode en ligne y est
+indisponible, et l'application le dit désormais clairement au joueur au lieu de
+réclamer `npm run server`.
+
+### Faire fonctionner le jeu en ligne en production
+
+1. Déployez `server.js` sur une plateforme qui garde un processus vivant :
+   Railway, Render, Fly.io, ou un VPS. La commande de démarrage est
+   `npm run server`, et le port est lu depuis `PORT`.
+2. Vérifiez que le service répond : `https://votre-serveur/healthz` renvoie
+   `{"ok":true,"rooms":0}`.
+3. Sur l'hébergement de la page (Vercel), déclarez son adresse :
+
+   ```bash
+   NEXT_PUBLIC_SOCKET_URL=https://votre-serveur
+   ```
+
+   Cette variable est lue au moment du build : **redéployez** après l'avoir
+   ajoutée.
+4. Côté serveur temps réel, restreignez qui peut s'y connecter :
+
+   ```bash
+   ALLOWED_ORIGIN=https://votre-jeu.vercel.app
+   ```
+
+Rien n'empêche non plus de tout servir depuis `server.js` : il sert la page
+Next et les websockets sur le même port, et aucune variable n'est alors
+nécessaire.
+
+### Limite connue
+
+Les salles vivent en mémoire, dans une seule instance. Le service temps réel ne
+peut donc pas être répliqué en l'état : deux joueurs tombés sur deux instances
+différentes ne se verraient pas. Pour passer à l'échelle, il faudrait sortir
+l'état des salles vers un magasin partagé (Redis) et brancher l'adaptateur
+socket.io correspondant.
 
 ## Tests
 

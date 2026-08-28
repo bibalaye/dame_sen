@@ -13,12 +13,24 @@ const gameRooms = new Map();
 
 app.prepare().then(() => {
   const server = http.createServer((req, res) => {
+    // Sonde de santé : permet de vérifier d'un coup d'œil que le service temps
+    // réel tourne, et sert de test de disponibilité aux hébergeurs.
+    if (req.url === '/healthz') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, rooms: gameRooms.size }));
+      return;
+    }
     handle(req, res);
   });
 
+  // La page peut être servie par un autre domaine que ce serveur temps réel
+  // (Vercel d'un côté, l'hébergeur des websockets de l'autre). ALLOWED_ORIGIN
+  // restreint qui a le droit de s'y connecter ; sans elle, tout est accepté.
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
+
   const io = new Server(server, {
     cors: {
-      origin: '*',
+      origin: allowedOrigin === '*' ? '*' : allowedOrigin.split(',').map(o => o.trim()),
       methods: ['GET', 'POST']
     }
   });
@@ -167,6 +179,7 @@ app.prepare().then(() => {
 
   server.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Origines autorisées : ${allowedOrigin}`);
   });
 });
 

@@ -176,3 +176,18 @@
     transition: none;
   }
 }
+
+/* Un échec de connexion doit offrir une sortie, pas un formulaire mort. */
+.errorText {
+  margin: 0 0 10px;
+}
+
+.errorActions {
+  display: flex;
+  gap: 8px;
+}
+
+.errorActions .btn {
+  padding: 10px 14px;
+  font-size: 0.86rem;
+}
