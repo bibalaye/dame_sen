@@ -52,11 +52,11 @@ export type Phase = 'placement' | 'movement';
  *
  * `classic` : les huit alignements comptent en permanence.
  *
- * `moving-heart` : une case porte le « cœur ». Les alignements qui la
- * traversent ne comptent pas, et le cœur change de case toutes les trois tours.
- * Le centre n'est spécial que parce qu'il porte quatre alignements contre trois
- * pour un coin et deux pour un bord : déplacer cet avantage empêche toute
- * position d'équilibre durable, et c'est ce qui fait tomber les nulles.
+ * `moving-heart` : une case est condamnée — le « cœur » — et personne ne peut
+ * s'y poser ni s'y déplacer. Elle change de case toutes les trois tours, ce qui
+ * redessine le terrain en pleine partie et empêche toute position d'équilibre
+ * durable. Les huit alignements, eux, comptent toujours : trois pions alignés
+ * gagnent, où qu'ils se trouvent.
  */
 export type MorpionVariant = 'classic' | 'moving-heart';
 
@@ -127,18 +127,30 @@ export const createMorpion = (
 });
 
 /**
- * Les alignements qui comptent. Le cœur neutralise ceux qui le traversent :
- * posé au centre il en désactive quatre, sur un coin trois.
+ * Les alignements comptent tous, en permanence. Le cœur retire une case du jeu,
+ * il ne retire jamais une victoire : aligner trois pions gagne toujours, même
+ * en passant par la case qu'il vient de quitter.
  */
-export const activeLines = (heart: number | null): readonly Line[] =>
-  heart === null ? LINES : LINES.filter((line) => !line.includes(heart));
+export const activeLines = (): readonly Line[] => LINES;
+
+/**
+ * L'étape suivante du cœur : la première case libre du parcours. Si le tour
+ * complet ne trouve rien, il reste où il est plutôt que d'expulser un pion.
+ */
+const nextHeart = (grid: Grid, current: number | null): number | null => {
+  if (current === null) return null;
+  const start = HEART_PATH.indexOf(current);
+
+  for (let step = 1; step <= HEART_PATH.length; step++) {
+    const candidate = HEART_PATH[(start + step) % HEART_PATH.length];
+    if (!grid[candidate]) return candidate;
+  }
+  return current;
+};
 
 /** La ligne gagnante d'une grille, s'il y en a une. */
-export const findWinningLine = (
-  grid: Grid,
-  heart: number | null = null,
-): { mark: Mark; line: Line } | null => {
-  for (const line of activeLines(heart)) {
+export const findWinningLine = (grid: Grid): { mark: Mark; line: Line } | null => {
+  for (const line of LINES) {
     const [a, b, c] = line;
     const mark = grid[a];
     if (mark && mark === grid[b] && mark === grid[c]) return { mark, line };
@@ -152,9 +164,12 @@ export const availableMoves = (state: MorpionState): MorpionMove[] => {
 
   const moves: MorpionMove[] = [];
 
+  // La case du cœur est condamnée : ni pose ni arrivée.
+  const blocked = state.heart;
+
   if (state.phase === 'placement') {
     for (let i = 0; i < 9; i++) {
-      if (!state.grid[i]) moves.push({ type: 'place', to: i });
+      if (!state.grid[i] && i !== blocked) moves.push({ type: 'place', to: i });
     }
     return moves;
   }
@@ -164,7 +179,7 @@ export const availableMoves = (state: MorpionState): MorpionMove[] => {
   for (let from = 0; from < 9; from++) {
     if (state.grid[from] !== state.current) continue;
     for (let to = 0; to < 9; to++) {
-      if (!state.grid[to]) moves.push({ type: 'move', from, to });
+      if (!state.grid[to] && to !== blocked) moves.push({ type: 'move', from, to });
     }
   }
   return moves;
@@ -201,7 +216,7 @@ export const playMorpion = (
       ? { ...state.placed, [state.current]: state.placed[state.current] + 1 }
       : state.placed;
 
-  const won = findWinningLine(grid, state.heart);
+  const won = findWinningLine(grid);
   if (won) {
     return {
       ...state,
@@ -233,9 +248,9 @@ export const playMorpion = (
   const countdown = shifting ? state.movesUntilShift - 1 : state.movesUntilShift;
   const shifts = shifting && countdown <= 0;
 
-  const heart = shifts
-    ? HEART_PATH[(HEART_PATH.indexOf(state.heart ?? HEART_PATH[0]) + 1) % HEART_PATH.length]
-    : state.heart;
+  // Il glisse vers la prochaine étape libre : condamner une case occupée
+  // reviendrait à faire disparaître un pion.
+  const heart = shifts ? nextHeart(grid, state.heart) : state.heart;
 
   // La position inclut le cœur : la même grille sous deux cœurs différents
   // n'offre pas les mêmes alignements, ce n'est donc pas une répétition.
@@ -259,16 +274,6 @@ export const playMorpion = (
     positionCounts,
   };
 
-  // Le cœur venant de bouger peut libérer un alignement déjà formé.
-  if (shifts) {
-    const revealed = findWinningLine(grid, heart);
-    if (revealed) {
-      return {
-        ...draft,
-        status: { kind: 'win', winner: revealed.mark, line: revealed.line },
-      };
-    }
-  }
 
   if ((positionCounts[key] ?? 0) >= REPETITION_LIMIT) {
     return { ...draft, status: { kind: 'draw', reason: 'repetition' } };
@@ -330,7 +335,7 @@ const evaluate = (state: MorpionState, me: Mark, attackBias: number): number => 
   const enemy = other(me);
   let score = 0;
 
-  for (const [a, b, c] of activeLines(state.heart)) {
+  for (const [a, b, c] of LINES) {
     const cells = [state.grid[a], state.grid[b], state.grid[c]];
     const mine = cells.filter((cell) => cell === me).length;
     const theirs = cells.filter((cell) => cell === enemy).length;
@@ -340,9 +345,10 @@ const evaluate = (state: MorpionState, me: Mark, attackBias: number): number => 
     if (mine === 1 && theirs === 0) score += 1;
   }
 
-  // Occuper une case chargée d'alignements vaut mieux qu'une case morte.
+  // Une case porte d'autant plus qu'elle appartient à des alignements : le
+  // centre en a quatre, un coin trois, un bord deux.
   for (const cell of [0, 2, 4, 6, 8]) {
-    const weight = activeLines(state.heart).filter((line) => line.includes(cell)).length;
+    const weight = LINES.filter((line) => line.includes(cell)).length;
     if (state.grid[cell] === me) score += weight;
     if (state.grid[cell] === enemy) score -= weight;
   }

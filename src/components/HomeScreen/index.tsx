@@ -50,7 +50,7 @@ const MORPION_VARIANTS: ReadonlyArray<{
   {
     id: 'moving-heart',
     label: 'Cœur mouvant',
-    detail: 'Une case neutralise ses alignements, et se déplace tous les trois tours',
+    detail: 'Une case est condamnée et se déplace tous les trois tours',
   },
   { id: 'classic', label: 'Classique', detail: 'Les huit alignements comptent en permanence' },
 ];

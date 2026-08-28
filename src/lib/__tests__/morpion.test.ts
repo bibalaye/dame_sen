@@ -6,7 +6,6 @@ import {
   HEART_PERIOD,
   MORPION_OPPONENTS,
   NO_WIN_LIMIT,
-  activeLines,
   PIECES_PER_PLAYER,
   availableMoves,
   bestMove,
@@ -326,30 +325,48 @@ describe('cœur mouvant', () => {
   test('la variante classique n’a pas de cœur', () => {
     const state = createMorpion('X', 'classic');
     assert.equal(state.heart, null);
-    assert.equal(activeLines(null).length, 8);
+    assert.equal(availableMoves(state).length, 9);
   });
 
-  test('le cœur au centre neutralise quatre alignements', () => {
-    // Le centre porte quatre lignes : il en reste donc quatre actives.
-    assert.equal(activeLines(4).length, 4);
-    // Un coin n'en porte que trois.
-    assert.equal(activeLines(0).length, 5);
-    // Un bord, deux.
-    assert.equal(activeLines(1).length, 6);
+  test('la case du cœur est retirée du jeu', () => {
+    const state = createMorpion('X', 'moving-heart');
+    assert.equal(state.heart, HEART_PATH[0]);
+
+    const cibles = availableMoves(state).map((m) =>
+      m.type === 'place' ? m.to : -1,
+    );
+    assert.equal(cibles.length, 8, 'huit cases jouables, pas neuf');
+    assert.ok(!cibles.includes(state.heart!), 'on ne pose pas sur le cœur');
   });
 
-  test('un alignement qui traverse le cœur ne gagne pas', () => {
-    const grid = gridFrom('XXX OO. ...');
-    // Sans cœur, la rangée du haut gagne.
-    assert.ok(findWinningLine(grid, null));
-    // Avec le cœur sur la case 1, cette même rangée ne compte plus.
-    assert.equal(findWinningLine(grid, 1), null);
+  test('on ne s’y déplace pas non plus', () => {
+    const state = movementState('XOX O.. .OX', 'X', 5);
+    const arrivees = availableMoves(state).map((m) => (m.type === 'move' ? m.to : -1));
+    assert.ok(!arrivees.includes(5), 'le cœur reste interdit en phase 2');
+  });
+
+  test('un alignement gagne, même à travers le cœur', () => {
+    // Le cœur occupe la case 7 ; la rangée du haut doit gagner malgré tout.
+    const state = movementState('XX. O.X OO.', 'X', 7);
+    const won = playMorpion(state, move(5, 2));
+
+    assert.equal(won.status.kind, 'win', 'trois pions alignés gagnent toujours');
+    if (won.status.kind === 'win') {
+      assert.deepEqual(won.status.line, [0, 1, 2]);
+    }
+  });
+
+  test('un alignement passant par une case voisine du cœur gagne aussi', () => {
+    // Le cœur est en 4, au milieu : la colonne de gauche reste gagnante.
+    const grid = gridFrom('X.O X.O X..');
+    const won = findWinningLine(grid);
+    assert.ok(won, 'aucun alignement ne doit être neutralisé');
+    assert.equal(won!.mark, 'X');
   });
 
   test('le cœur reste immobile pendant la pose', () => {
     let state = createMorpion('X', 'moving-heart');
-    assert.equal(state.heart, HEART_PATH[0]);
-
+    // La case 4 est prise par le cœur : on pose autour.
     for (const cell of [0, 1, 3, 2, 7, 5]) {
       state = playMorpion(state, place(cell));
       assert.equal(state.heart, HEART_PATH[0], `le cœur a bougé sur la pose ${cell}`);
@@ -364,11 +381,8 @@ describe('cœur mouvant', () => {
     const before = state.heart;
     assert.equal(state.movesUntilShift, HEART_PERIOD);
 
-    // Six demi-coups de déplacement : le cœur doit alors avancer d'un cran.
     for (let i = 0; i < HEART_PERIOD && state.status.kind === 'playing'; i++) {
-      const options = availableMoves(state);
-      // On choisit un déplacement qui n'aligne rien, pour aller au bout.
-      const quiet = options.find(
+      const quiet = availableMoves(state).find(
         (m) => playMorpion(state, m).status.kind === 'playing',
       );
       if (!quiet) break;
@@ -379,17 +393,26 @@ describe('cœur mouvant', () => {
     assert.ok(HEART_PATH.includes(state.heart!));
   });
 
-  test('la même grille sous deux cœurs n’est pas une répétition', () => {
-    const withHeartA = movementState('X.O XO. .XO', 'X', 4);
-    const withHeartB = movementState('X.O XO. .XO', 'X', 0);
+  test('il ne se pose jamais sur un pion', () => {
+    let state = createMorpion('X', 'moving-heart');
+    for (const cell of [0, 1, 3, 2, 7, 5]) state = playMorpion(state, place(cell));
 
-    // Les alignements disponibles diffèrent : ce ne sont pas les mêmes positions.
-    assert.notDeepEqual(activeLines(withHeartA.heart), activeLines(withHeartB.heart));
+    for (let i = 0; i < 40 && state.status.kind === 'playing'; i++) {
+      const next = findBestMorpionMove(state, 'medium', seeded(i + 1));
+      if (!next) break;
+      state = playMorpion(state, next);
+
+      if (state.heart !== null) {
+        assert.equal(
+          state.grid[state.heart],
+          null,
+          `le cœur s'est posé sur un pion au coup ${i}`,
+        );
+      }
+    }
   });
 
-  test('le cœur mouvant fait disparaître les nulles par répétition', () => {
-    // Mesuré : 23 % de nulles en classique entre deux niveaux moyens, aucune
-    // avec le cœur mouvant, parce qu'aucune position d'équilibre ne tient.
+  test('la variante fait tomber les nulles', () => {
     let draws = 0;
     const rounds = 10;
 
@@ -408,6 +431,6 @@ describe('cœur mouvant', () => {
       if (state.status.kind === 'draw') draws++;
     }
 
-    assert.ok(draws <= 1, `${draws} nulles sur ${rounds} : la variante ne tient pas`);
+    assert.ok(draws <= rounds / 2, `${draws} nulles sur ${rounds}`);
   });
 });

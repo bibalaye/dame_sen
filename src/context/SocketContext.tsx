@@ -1,6 +1,13 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { Board, Move as DamesMove, Player } from '@/lib/engine';
 import type { MorpionMove } from '@/lib/morpion';
@@ -102,6 +109,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [roomGame, setRoomGame] = useState<RoomGame | null>(null);
+  /** Le camp reçu, lisible dans les abonnements sans avoir à les réinstaller. */
+  const playerTypeRef = useRef<Player | null>(null);
   const [playerType, setPlayer] = useState<Player | null>(null);
   const [opponent, setOpponent] = useState<string | null>(null);
   const [isMultiplayer, setIsMultiplayer] = useState(false);
@@ -171,6 +180,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     socket.on('room-created', (data) => {
       setRoomId(data.roomId);
       setPlayer(data.player);
+      playerTypeRef.current = data.player;
       setRoomGame(data.game ?? 'dames');
       setIsRoomCreator(true);
     });
@@ -179,6 +189,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     socket.on('room-joined', (data) => {
       setRoomId(data.roomId);
       setPlayer(data.player);
+      playerTypeRef.current = data.player;
       // C'est la salle qui impose le jeu, pas le choix fait sur l'accueil.
       setRoomGame(data.game ?? 'dames');
     });
@@ -192,6 +203,15 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     // Game started
     socket.on('game-start', (data) => {
       if (data?.game) setRoomGame(data.game);
+
+      // « opponent-joined » n'est envoyé qu'à celui qui attendait : celui qui
+      // vient d'entrer ne connaîtrait jamais le nom d'en face sans ceci.
+      const others = (data?.players ?? []).filter(
+        (entry: { player: Player; username: string }) =>
+          entry.player !== playerTypeRef.current,
+      );
+      if (others[0]?.username) setOpponent(others[0].username);
+
       setIsGameStarted(true);
     });
 
@@ -296,6 +316,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       setRoomId(null);
       setRoomGame(null);
       setPlayer(null);
+      playerTypeRef.current = null;
       setOpponent(null);
       setIsRoomCreator(false);
       setIsGameStarted(false);

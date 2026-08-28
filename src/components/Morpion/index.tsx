@@ -176,10 +176,12 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
     play(mode === 'pass' || winner === (online ? myMark : HUMAN) ? 'win' : 'lose');
   }, [state, mode, online, myMark]);
 
+  // En ligne, c'est le démarrage annoncé par le serveur qui ouvre le jeu — pas
+  // le nom de l'adversaire, que seul l'hôte reçoit et qui bloquait l'invité.
   const canAct =
     !finished &&
     (mode === 'pass' ||
-      (online ? state.current === myMark && !!opponent : state.current === HUMAN));
+      (online ? state.current === myMark && isGameStarted : state.current === HUMAN));
   const moves = canAct ? availableMoves(state) : [];
 
   /** Cases où le pion sélectionné peut se rendre : toutes les cases libres. */
@@ -240,7 +242,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
       : placedTotal === PIECES_PER_PLAYER * 2 && state.lastMove?.type === 'place'
         ? 'Pions en place — déplacez-en un où vous voulez'
         : heartMoved
-          ? 'Le cœur se déplace — les alignements changent !'
+          ? 'Le cœur se déplace — une autre case est condamnée !'
           : ''
     : '';
 
@@ -355,7 +357,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
                   aria-label={`Case ${index + 1}, ${
                     cell === 'X' ? 'croix' : cell === 'O' ? 'rond' : 'libre'
                   }${isDestination ? ', destination possible' : ''}${
-                    state.heart === index ? ', cœur : aucun alignement ne compte ici' : ''
+                    state.heart === index ? ', case condamnée' : ''
                   }`}
                   aria-pressed={selected === index}
                 >

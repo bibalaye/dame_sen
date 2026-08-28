@@ -388,8 +388,8 @@
 }
 
 /*
- * Le cœur : la case dont aucun alignement ne compte. Elle est creusée et
- * cerclée, pour se lire comme un trou dans le plateau plutôt que comme un bonus.
+ * Le cœur : la case condamnée, où personne ne peut jouer. Elle est creusée et
+ * barrée, pour se lire comme un trou dans le plateau plutôt qu'un bonus.
  */
 .heart {
   background: #6d5333;
