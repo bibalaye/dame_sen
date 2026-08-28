@@ -32,6 +32,7 @@
 .formGroup label {
   display: block;
   margin-bottom: 6px;
+  color: #4a4d52;
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -41,29 +42,14 @@
 
 .formGroup input {
   width: 100%;
-  padding: 13px 14px;
-  border: 2px solid var(--line);
-  border-radius: 12px;
+  min-height: 52px;
+  padding: 0 4px;
   font-size: 1rem;
-  font-family: inherit;
-  background-color: var(--surface-sunk);
-  color: var(--text);
-  transition: border-color 0.16s ease;
-}
-
-.formGroup input::placeholder {
-  color: var(--text-soft);
-  opacity: 0.75;
 }
 
 .formGroup input:focus {
   outline: none;
-  border-color: var(--green);
-}
-
-.formGroup input:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
+  filter: brightness(1.02);
 }
 
 .buttonGroup {

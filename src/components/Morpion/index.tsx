@@ -303,7 +303,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
       <header className={styles.hud}>
         <button
           type="button"
-          className={styles.hudBtn}
+          className={`uiRound ${styles.hudBtn}`}
           onClick={goHome}
           aria-label="Retour à l’accueil"
         >
@@ -324,7 +324,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
         </span>
         <button
           type="button"
-          className={styles.hudBtn}
+          className={`uiRound ${styles.hudBtn}`}
           onClick={() => setMenuOpen(true)}
           aria-label="Menu de la partie"
         >

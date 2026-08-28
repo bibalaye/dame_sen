@@ -262,3 +262,126 @@ button {
     transition: none;
   }
 }
+
+/*
+ * Habillage complet issu du pack d'interface.
+ *
+ * Chaque élément est une image découpée en neuf zones : les coins gardent leur
+ * forme, les bords s'étirent. Les classes s'ajoutent aux composants existants
+ * sans toucher à leur structure, et chacune garde un fond de secours au cas où
+ * l'image ne se charge pas.
+ */
+
+/* Panneau : le fond des modales et des encarts. */
+.uiPanel {
+  border-style: solid;
+  border-width: 20px;
+  border-image-slice: 20 fill;
+  border-image-width: 20px;
+  border-image-repeat: stretch;
+  border-image-source: url('/assets/ui/panel.png');
+  background-color: #f2f4f7;
+  background-clip: padding-box;
+
+  /*
+   * Le panneau du pack est clair dans les deux thèmes. Plutôt que de forcer la
+   * couleur de chaque texte — ce qui écraserait aussi le vert des victoires et
+   * le rouge des défaites — on redéfinit les jetons de couleur pour ce qu'il
+   * contient : les composants enfants s'y adaptent sans rien savoir du panneau.
+   */
+  --text: #2f3033;
+  --text-soft: #62666c;
+  --surface: #ffffff;
+  --surface-sunk: #e7eaee;
+  --line: #cdd2d8;
+  --brass-ink: #7d550c;
+  --green-ink: #03602f;
+  --green: #1f8a4d;
+  --red: #c2452c;
+  --focus: #046b36;
+
+  color: var(--text);
+}
+
+/* Bouton rond : les commandes du bandeau de jeu. */
+.uiRound {
+  border: none;
+  background: url('/assets/ui/round-neutral.png') center / 100% 100% no-repeat;
+  color: #2f3033;
+  font-family: var(--font-display);
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.uiRoundPrimary {
+  background-image: url('/assets/ui/round-primary.png');
+  color: #40320a;
+}
+
+.uiRound:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.uiRound:active:not(:disabled) {
+  transform: translateY(2px);
+}
+
+.uiRound:focus-visible,
+.uiClose:focus-visible,
+.uiInput:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* Croix de fermeture : le carré rouge du pack. */
+.uiClose {
+  border: none;
+  background: url('/assets/ui/close.png') center / 100% 100% no-repeat;
+  background-color: transparent;
+  font-size: 0;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.uiClose:hover {
+  filter: brightness(1.1);
+  transform: scale(1.06);
+}
+
+.uiClose:active {
+  transform: scale(0.96);
+}
+
+/* Champ de saisie. */
+.uiInput {
+  border-style: solid;
+  border-width: 14px 16px;
+  border-image-slice: 14 16 fill;
+  border-image-width: 14px 16px;
+  border-image-repeat: stretch;
+  border-image-source: url('/assets/ui/input.png');
+  background-color: #ffffff;
+  background-clip: padding-box;
+  color: #2f3033;
+  font-family: inherit;
+}
+
+.uiInput::placeholder {
+  color: #9aa0a6;
+}
+
+/* Séparateur horizontal. */
+.uiDivider {
+  height: 6px;
+  border: none;
+  background: url('/assets/ui/divider.png') center / 100% 100% no-repeat;
+  opacity: 0.9;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uiRound,
+  .uiClose {
+    transition: none;
+  }
+}

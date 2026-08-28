@@ -62,7 +62,7 @@ const Modal: React.FC<ModalProps> = ({
     <div className={styles.overlay} onClick={handleClose}>
       <div
         ref={panelRef}
-        className={`${styles.panel} ${variant === 'center' ? styles.center : styles.sheet}`}
+        className={`uiPanel ${styles.panel} ${variant === 'center' ? styles.center : styles.sheet}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -75,11 +75,11 @@ const Modal: React.FC<ModalProps> = ({
           {title && <h2 className={styles.title}>{title}</h2>}
           <button
             type="button"
-            className={styles.close}
+            className={`uiClose ${styles.close}`}
             onClick={onClose}
             aria-label="Fermer"
           >
-            ✕
+            Fermer
           </button>
         </header>
 

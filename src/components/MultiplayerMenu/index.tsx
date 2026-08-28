@@ -135,6 +135,7 @@ const MultiplayerMenu: React.FC = () => {
             <label htmlFor="username">Votre nom</label>
             <input
               type="text"
+              className="uiInput"
               id="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
@@ -148,6 +149,7 @@ const MultiplayerMenu: React.FC = () => {
               <label htmlFor="roomId">Code de la salle</label>
               <input
                 type="text"
+                className="uiInput"
                 id="roomId"
                 value={roomIdInput}
                 onChange={(event) => setRoomIdInput(event.target.value.toUpperCase())}

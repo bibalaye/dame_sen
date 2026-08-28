@@ -88,7 +88,7 @@ const GameBoard = () => {
       <header className={styles.hud}>
         <button
           type="button"
-          className={styles.hudBtn}
+          className={`uiRound ${styles.hudBtn}`}
           onClick={goHome}
           aria-label="Retour à l’accueil"
         >
@@ -107,7 +107,7 @@ const GameBoard = () => {
 
         <button
           type="button"
-          className={styles.hudBtn}
+          className={`uiRound ${styles.hudBtn}`}
           onClick={() => setSheet('menu')}
           aria-label="Menu de la partie"
         >

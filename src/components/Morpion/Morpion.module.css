@@ -28,21 +28,10 @@
 }
 
 .hudBtn {
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--text-soft);
-  font-size: 1.1rem;
+  width: 46px;
+  height: 46px;
+  font-size: 1.15rem;
   line-height: 1;
-  cursor: pointer;
-  transition: border-color 0.16s ease, color 0.16s ease;
-}
-
-.hudBtn:hover {
-  border-color: var(--brass);
-  color: var(--text);
 }
 
 .hudBtn:focus-visible,
