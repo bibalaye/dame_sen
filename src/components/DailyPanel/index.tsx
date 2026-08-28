@@ -13,6 +13,8 @@ import styles from './DailyPanel.module.css';
 const DailyPanel: React.FC = () => {
   const { daily, currentPlayer, retryDaily, shareDaily, goHome } = useGameContext();
   const [copied, setCopied] = useState(false);
+  /** Refermé à la croix : le joueur veut revoir la position sans le panneau. */
+  const [dismissed, setDismissed] = useState<number | null>(null);
 
   if (!daily) return null;
 
@@ -22,6 +24,7 @@ const DailyPanel: React.FC = () => {
   // Un essai s'achève quand le trait quitte les blancs.
   const betweenAttempts = !finished && attempts.length > 0 && currentPlayer !== 'white';
   if (!finished && !betweenAttempts) return null;
+  if (dismissed === attempts.length) return null;
 
   const handleShare = async () => {
     const text = shareDaily();
@@ -53,7 +56,7 @@ const DailyPanel: React.FC = () => {
             : 'Défi manqué'
           : 'Essai terminé'
       }
-      onClose={() => undefined}
+      onClose={() => setDismissed(attempts.length)}
     >
       <div className={styles.body}>
         <div className={styles.score}>

@@ -63,6 +63,8 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
   const [series, setSeries] = useState({ X: 0, O: 0 });
   const [menuOpen, setMenuOpen] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
+  /** Résultat refermé à la croix : on veut revoir la grille finale. */
+  const [resultHidden, setResultHidden] = useState(false);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -78,6 +80,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
     setState(fresh);
     setSelected(null);
     setIsThinking(false);
+    setResultHidden(false);
   }, []);
 
   const commit = useCallback(
@@ -357,13 +360,18 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
       </main>
 
       {online && (!roomId || isWaitingForOpponent) && (
-        <Modal title="Jouer à distance" dismissible={false} onClose={() => undefined}>
+        <Modal title="Jouer à distance" dismissible={false} onClose={goHome}>
           <MultiplayerMenu />
         </Modal>
       )}
 
-      {finished && (
-        <Modal variant="center" dismissible={false} title={heading} onClose={() => undefined}>
+      {finished && !resultHidden && (
+        <Modal
+          variant="center"
+          dismissible={false}
+          title={heading}
+          onClose={() => setResultHidden(true)}
+        >
           <div className={styles.result}>
             <p className={styles.resultText}>{detail}</p>
 

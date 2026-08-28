@@ -11,6 +11,9 @@ import type { MorpionMove } from '@/lib/morpion';
  */
 export type NetworkMove = DamesMove | MorpionMove;
 
+/** Le jeu auquel se joue une salle. */
+export type RoomGame = 'dames' | 'morpion';
+
 /** Port sur lequel `npm run server` expose le serveur temps réel. */
 const REALTIME_PORT = '5000';
 
@@ -43,13 +46,15 @@ interface SocketContextType {
   socket: Socket | null;
   isConnected: boolean;
   roomId: string | null;
+  /** Jeu de la salle rejointe : celui qui entre doit ouvrir le même plateau. */
+  roomGame: RoomGame | null;
   playerType: Player | null;
   opponent: string | null;
   isMultiplayer: boolean;
   isRoomCreator: boolean;
   isGameStarted: boolean;
   error: string | null;
-  createRoom: (username: string) => void;
+  createRoom: (username: string, game: RoomGame) => void;
   joinRoom: (roomId: string, username: string) => void;
   makeMove: (move: NetworkMove, nextPlayer: Player) => void;
   syncGameState: (board: Board, currentPlayer: Player) => void;
@@ -75,6 +80,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
+  const [roomGame, setRoomGame] = useState<RoomGame | null>(null);
   const [playerType, setPlayer] = useState<Player | null>(null);
   const [opponent, setOpponent] = useState<string | null>(null);
   const [isMultiplayer, setIsMultiplayer] = useState(false);
@@ -138,18 +144,18 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
     // Room created successfully
     socket.on('room-created', (data) => {
-      console.log('Room created event received:', data);
       setRoomId(data.roomId);
       setPlayer(data.player);
+      setRoomGame(data.game ?? 'dames');
       setIsRoomCreator(true);
-      console.log(`Room created: ${data.roomId}`);
     });
 
     // Room joined successfully
     socket.on('room-joined', (data) => {
       setRoomId(data.roomId);
       setPlayer(data.player);
-      console.log(`Joined room: ${data.roomId}`);
+      // C'est la salle qui impose le jeu, pas le choix fait sur l'accueil.
+      setRoomGame(data.game ?? 'dames');
     });
 
     // Opponent joined the room
@@ -160,8 +166,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
     // Game started
     socket.on('game-start', (data) => {
+      if (data?.game) setRoomGame(data.game);
       setIsGameStarted(true);
-      console.log('Game started', data);
     });
 
     // Opponent made a move
@@ -209,13 +215,13 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
    * le clic parce que la connexion prenait une demi-seconde de plus était la
    * cause de l'échec « Socket not connected ».
    */
-  const createRoom = (username: string) => {
+  const createRoom = (username: string, game: RoomGame) => {
     if (!socket) {
       setError('Le mode en ligne n’est pas encore prêt, réessayez.');
       return;
     }
     setError(null);
-    socket.emit('create-room', username);
+    socket.emit('create-room', { username, game });
   };
 
   const joinRoom = (roomId: string, username: string) => {
@@ -263,6 +269,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       setSocket(null);
       setIsConnected(false);
       setRoomId(null);
+      setRoomGame(null);
       setPlayer(null);
       setOpponent(null);
       setIsRoomCreator(false);
@@ -276,6 +283,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         socket,
         isConnected,
         roomId,
+        roomGame,
         playerType,
         opponent,
         isMultiplayer,

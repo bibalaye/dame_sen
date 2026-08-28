@@ -244,6 +244,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isConnected,
     error: socketError,
     roomId,
+    roomGame,
     playerType,
     opponent,
     isGameStarted,
@@ -355,14 +356,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         : null);
 
   /**
-   * En mode « autour du plateau », chacun doit voir ses pièces devant soi : le
-   * plateau pivote quand les noirs prennent la main. En ligne, il est orienté
-   * une fois pour toutes selon la couleur du joueur.
+   * Autour du plateau, on ne fait pas pivoter la planche : les deux joueurs
+   * sont assis de part et d'autre et gardent chacun leur point de vue, comme
+   * sur une vraie table. En ligne, le plateau est orienté une fois pour toutes
+   * selon la couleur reçue, pour que chacun ait ses pièces devant soi.
    */
-  const isFlipped =
-    mode === 'pass'
-      ? game.currentPlayer === 'black'
-      : mode === 'online' && playerType === 'black';
+  const isFlipped = mode === 'online' && playerType === 'black';
 
   // --- Démarrage et arrêt -------------------------------------------------
 
@@ -653,6 +652,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // --- Multijoueur --------------------------------------------------------
 
   useEffect(() => {
+    if (roomGame && roomGame !== kind) setKind(roomGame);
+  }, [roomGame, kind]);
+
+  useEffect(() => {
     if (opponent) {
       setIsWaitingForOpponent(false);
       setNotice(`${opponent} a rejoint la partie !`);
@@ -780,11 +783,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const createRoom = useCallback(
     (username: string) => {
-      socketCreateRoom(username);
+      // La salle porte le jeu choisi : celui qui rejoindra ouvrira le même.
+      socketCreateRoom(username, kind);
       setIsWaitingForOpponent(true);
       setNotice("En attente d'un adversaire…");
     },
-    [socketCreateRoom],
+    [socketCreateRoom, kind],
   );
 
   const joinRoom = useCallback(

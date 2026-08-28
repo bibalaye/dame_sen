@@ -28,11 +28,16 @@ app.prepare().then(() => {
     console.log(`User connected: ${socket.id}`);
 
     // Create a new game room
-    socket.on('create-room', (username) => {
+    socket.on('create-room', (payload) => {
+      // L'ancien protocole n'envoyait qu'un nom ; on accepte les deux formes.
+      const username = typeof payload === 'string' ? payload : payload?.username;
+      const game = (typeof payload === 'object' && payload?.game) || 'dames';
       const roomId = generateRoomId();
-      
+
       gameRooms.set(roomId, {
         id: roomId,
+        // Le jeu de la salle : celui qui rejoint doit ouvrir le même plateau.
+        game,
         players: [{
           id: socket.id,
           username,
@@ -44,9 +49,9 @@ app.prepare().then(() => {
       });
 
       socket.join(roomId);
-      socket.emit('room-created', { roomId, player: 'white' });
-      
-      console.log(`Room created: ${roomId} by ${username}`);
+      socket.emit('room-created', { roomId, player: 'white', game });
+
+      console.log(`Room created: ${roomId} by ${username} (${game})`);
     });
 
     // Join an existing game room
@@ -71,7 +76,7 @@ app.prepare().then(() => {
       });
 
       socket.join(roomId);
-      socket.emit('room-joined', { roomId, player: 'black' });
+      socket.emit('room-joined', { roomId, player: 'black', game: room.game ?? 'dames' });
       
       // Notify the other player
       socket.to(roomId).emit('opponent-joined', { username });
@@ -79,7 +84,8 @@ app.prepare().then(() => {
       // If we have two players, start the game
       if (room.players.length === 2) {
         room.gameStarted = true;
-        io.to(roomId).emit('game-start', { 
+        io.to(roomId).emit('game-start', {
+          game: room.game ?? 'dames',
           players: room.players.map(p => ({ username: p.username, player: p.player }))
         });
       }

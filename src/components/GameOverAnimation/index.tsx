@@ -17,6 +17,8 @@ interface GameOverAnimationProps {
   onRematch: () => void;
   onHome: () => void;
   onShare: () => void;
+  /** Referme le panneau pour laisser voir la position finale. */
+  onDismiss: () => void;
 }
 
 const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
@@ -29,6 +31,7 @@ const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
   onRematch,
   onHome,
   onShare,
+  onDismiss,
 }) => {
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
 
@@ -75,6 +78,14 @@ const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
       )}
 
       <div className={celebrate ? styles.victoryMessage : styles.gameOverMessage}>
+        <button
+          type="button"
+          className={styles.close}
+          onClick={onDismiss}
+          aria-label="Fermer et revoir la position"
+        >
+          ✕
+        </button>
         <h2>{heading}</h2>
         <p>{detail}</p>
 

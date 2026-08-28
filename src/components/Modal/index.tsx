@@ -7,7 +7,11 @@ interface ModalProps {
   title?: string;
   /** Une feuille qui monte du bas sur mobile, plutôt qu'une boîte centrée. */
   variant?: 'sheet' | 'center';
-  /** Masque la croix : pour les étapes qu'on ne peut pas simplement fermer. */
+  /**
+   * Empêche la fermeture au clic hors du panneau et à la touche Échap, pour les
+   * étapes qu'on ne referme pas d'un geste distrait. La croix reste affichée :
+   * une fenêtre sans issue visible est toujours une impasse pour le joueur.
+   */
   dismissible?: boolean;
   onClose: () => void;
   children: React.ReactNode;
@@ -63,21 +67,17 @@ const Modal: React.FC<ModalProps> = ({
       >
         {variant === 'sheet' && <span className={styles.grip} aria-hidden="true" />}
 
-        {(title || dismissible) && (
-          <header className={styles.header}>
-            {title && <h2 className={styles.title}>{title}</h2>}
-            {dismissible && (
-              <button
-                type="button"
-                className={styles.close}
-                onClick={onClose}
-                aria-label="Fermer"
-              >
-                ✕
-              </button>
-            )}
-          </header>
-        )}
+        <header className={styles.header}>
+          {title && <h2 className={styles.title}>{title}</h2>}
+          <button
+            type="button"
+            className={styles.close}
+            onClick={onClose}
+            aria-label="Fermer"
+          >
+            ✕
+          </button>
+        </header>
 
         <div className={styles.body}>{children}</div>
       </div>

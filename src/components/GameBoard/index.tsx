@@ -47,6 +47,8 @@ const GameBoard = () => {
   } = useGameContext();
 
   const [sheet, setSheet] = useState<Sheet>(null);
+  /** Écran de fin refermé : le joueur veut revoir la position. */
+  const [resultHidden, setResultHidden] = useState(false);
 
   const character = OPPONENTS.find((entry) => entry.id === difficulty);
   const startingPieces = mode === 'daily' ? Math.max(whitePieces, blackPieces, 1) : 12;
@@ -161,6 +163,7 @@ const GameBoard = () => {
                 className={`${styles.menuItem} ${styles.menuPrimary}`}
                 onClick={() => {
                   resetGame();
+                  setResultHidden(false);
                   setSheet(null);
                 }}
               >
@@ -207,7 +210,9 @@ const GameBoard = () => {
         <Modal
           title="Jouer à distance"
           dismissible={!roomPending}
-          onClose={() => setSheet(null)}
+          // Sans adversaire, il n'y a pas de partie derrière : fermer, c'est
+          // renoncer et repartir de l'accueil.
+          onClose={roomPending ? goHome : () => setSheet(null)}
         >
           <MultiplayerMenu />
         </Modal>
@@ -219,13 +224,17 @@ const GameBoard = () => {
         <GameOverAnimation
           winner={winner}
           isDraw={status.kind === 'draw'}
-          isVisible={gameOver}
+          isVisible={gameOver && !resultHidden}
           mode={mode}
           series={series}
           bestChain={bestChain}
-          onRematch={resetGame}
+          onRematch={() => {
+            setResultHidden(false);
+            resetGame();
+          }}
           onHome={goHome}
           onShare={shareResult}
+          onDismiss={() => setResultHidden(true)}
         />
       )}
     </div>
