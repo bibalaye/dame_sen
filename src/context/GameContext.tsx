@@ -57,6 +57,7 @@ import {
   saveProgress,
   type DailyPuzzle,
 } from '@/lib/daily';
+import type { MorpionVariant } from '@/lib/morpion';
 import { useSocketContext, type NetworkMove } from './SocketContext';
 import type { Socket } from 'socket.io-client';
 
@@ -86,6 +87,7 @@ export interface DailyState {
 
 export interface StartOptions {
   readonly kind?: GameKind;
+  readonly morpionVariant?: MorpionVariant;
   readonly mode: GameMode;
   readonly difficulty?: Difficulty;
   readonly timeControl?: TimeControl;
@@ -95,6 +97,7 @@ export interface StartOptions {
 interface GameContextType {
   screen: Screen;
   kind: GameKind;
+  morpionVariant: MorpionVariant;
   mode: GameMode;
   board: Board;
   currentPlayer: Player;
@@ -257,6 +260,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const [screen, setScreen] = useState<Screen>('home');
   const [kind, setKind] = useState<GameKind>('dames');
+  const [morpionVariant, setMorpionVariant] = useState<MorpionVariant>('moving-heart');
   const [mode, setMode] = useState<GameMode>('solo');
   const [variant, setVariant] = useState<Variant>('classic');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
@@ -367,6 +371,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const beginGame = useCallback((options: StartOptions) => {
     setKind(options.kind ?? 'dames');
+    if (options.morpionVariant) setMorpionVariant(options.morpionVariant);
     const nextVariant = options.variant ?? 'classic';
 
     // Le défi du jour ne part pas d'une position de départ mais du puzzle du
@@ -803,6 +808,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     () => ({
       screen,
       kind,
+      morpionVariant,
       mode,
       board: game.board,
       currentPlayer: game.currentPlayer,
@@ -859,6 +865,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       alert,
       bestChain,
       kind,
+      morpionVariant,
       blackPieces,
       clock,
       createRoom,

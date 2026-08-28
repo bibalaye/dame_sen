@@ -20,6 +20,7 @@ import {
   type MorpionDifficulty,
   type MorpionMove,
   type MorpionState,
+  type MorpionVariant,
 } from '@/lib/morpion';
 import styles from './Morpion.module.css';
 
@@ -30,6 +31,7 @@ const AI: Mark = 'O';
 interface MorpionProps {
   mode: Extract<GameMode, 'solo' | 'pass' | 'online'>;
   difficulty: MorpionDifficulty;
+  variant: MorpionVariant;
 }
 
 /**
@@ -40,7 +42,7 @@ interface MorpionProps {
 const markOf = (side: 'white' | 'black' | null): Mark => (side === 'black' ? 'O' : 'X');
 const sideOf = (mark: Mark): 'white' | 'black' => (mark === 'X' ? 'white' : 'black');
 
-const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
+const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
   const {
     goHome,
     muted,
@@ -58,7 +60,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
   /** La marque que ce joueur contrôle : croix pour l'hôte, ronds pour l'invité. */
   const myMark = online ? markOf(playerType) : HUMAN;
 
-  const [state, setState] = useState<MorpionState>(() => createMorpion());
+  const [state, setState] = useState<MorpionState>(() => createMorpion('X', variant));
   const [selected, setSelected] = useState<number | null>(null);
   const [series, setSeries] = useState({ X: 0, O: 0 });
   const [menuOpen, setMenuOpen] = useState(false);
@@ -75,13 +77,13 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
   const isMoving = state.phase === 'movement';
 
   const reset = useCallback(() => {
-    const fresh = createMorpion();
+    const fresh = createMorpion('X', variant);
     stateRef.current = fresh;
     setState(fresh);
     setSelected(null);
     setIsThinking(false);
     setResultHidden(false);
-  }, []);
+  }, [variant]);
 
   const commit = useCallback(
     (move: MorpionMove, byPlayer = true) => {
@@ -149,6 +151,19 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
       setIsThinking(false);
     };
   }, [state, mode, finished, difficulty, commit]);
+
+  // Le cœur qui change de case est l'événement de la variante : on le signale.
+  const previousHeart = useRef(state.heart);
+  const [heartMoved, setHeartMoved] = useState(false);
+  useEffect(() => {
+    if (state.heart === previousHeart.current) return;
+    previousHeart.current = state.heart;
+    setHeartMoved(true);
+    play('promote');
+    vibrate([12, 40, 18]);
+    const timer = setTimeout(() => setHeartMoved(false), 1400);
+    return () => clearTimeout(timer);
+  }, [state.heart]);
 
   // Le score de la série ne bouge qu'une fois par partie.
   const counted = useRef<MorpionState | null>(null);
@@ -224,7 +239,9 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
         : ''
       : placedTotal === PIECES_PER_PLAYER * 2 && state.lastMove?.type === 'place'
         ? 'Pions en place — déplacez-en un où vous voulez'
-        : ''
+        : heartMoved
+          ? 'Le cœur se déplace — les alignements changent !'
+          : ''
     : '';
 
   // Le morpion se joue sans pendule : on en fournit une désactivée.
@@ -272,6 +289,11 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
             : online
               ? 'en ligne'
               : (character?.name ?? '')}
+          {state.heart !== null && isMoving && (
+            <span className={styles.countdown}>
+              cœur dans {state.movesUntilShift}
+            </span>
+          )}
         </span>
         <button
           type="button"
@@ -317,6 +339,8 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
                     cell === 'X' ? styles.cross : '',
                     cell === 'O' ? styles.round : '',
                     winningLine?.includes(index) ? styles.winning : '',
+                    state.heart === index ? styles.heart : '',
+                    state.heart === index && heartMoved ? styles.heartMoved : '',
                     selected === index ? styles.selected : '',
                     isDestination ? styles.destination : '',
                     isPlaceable ? styles.placeable : '',
@@ -330,7 +354,9 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
                   disabled={finished}
                   aria-label={`Case ${index + 1}, ${
                     cell === 'X' ? 'croix' : cell === 'O' ? 'rond' : 'libre'
-                  }${isDestination ? ', destination possible' : ''}`}
+                  }${isDestination ? ', destination possible' : ''}${
+                    state.heart === index ? ', cœur : aucun alignement ne compte ici' : ''
+                  }`}
                   aria-pressed={selected === index}
                 >
                   <span className={styles.mark} aria-hidden="true" />

@@ -47,6 +47,25 @@ export const LINES: readonly Line[] = [
 
 export type Phase = 'placement' | 'movement';
 
+/**
+ * Les deux façons de jouer.
+ *
+ * `classic` : les huit alignements comptent en permanence.
+ *
+ * `moving-heart` : une case porte le « cœur ». Les alignements qui la
+ * traversent ne comptent pas, et le cœur change de case toutes les trois tours.
+ * Le centre n'est spécial que parce qu'il porte quatre alignements contre trois
+ * pour un coin et deux pour un bord : déplacer cet avantage empêche toute
+ * position d'équilibre durable, et c'est ce qui fait tomber les nulles.
+ */
+export type MorpionVariant = 'classic' | 'moving-heart';
+
+/** Le cœur passe par le centre puis fait le tour des coins. */
+export const HEART_PATH: readonly number[] = [4, 0, 2, 8, 6];
+
+/** Demi-coups entre deux déplacements du cœur : trois tours complets. */
+export const HEART_PERIOD = 6;
+
 export type MorpionMove =
   | { readonly type: 'place'; readonly to: number }
   | { readonly type: 'move'; readonly from: number; readonly to: number };
@@ -63,6 +82,11 @@ export interface MorpionState {
   readonly grid: Grid;
   readonly current: Mark;
   readonly phase: Phase;
+  readonly variant: MorpionVariant;
+  /** Case portant le cœur, ou `null` en variante classique. */
+  readonly heart: number | null;
+  /** Demi-coups restants avant que le cœur ne change de case. */
+  readonly movesUntilShift: number;
   /** Pions déjà posés par chaque camp. */
   readonly placed: Readonly<Record<Mark, number>>;
   readonly status: MorpionStatus;
@@ -79,13 +103,22 @@ const EMPTY_GRID: Grid = Array<Cell>(9).fill(null);
 export const serializeGrid = (grid: Grid): string =>
   grid.map((cell) => cell ?? '.').join('');
 
-const positionKey = (grid: Grid, current: Mark): string =>
-  `${serializeGrid(grid)}:${current}`;
+const positionKey = (
+  grid: Grid,
+  current: Mark,
+  heart: number | null = null,
+): string => `${serializeGrid(grid)}:${current}:${heart ?? '-'}`;
 
-export const createMorpion = (first: Mark = 'X'): MorpionState => ({
+export const createMorpion = (
+  first: Mark = 'X',
+  variant: MorpionVariant = 'classic',
+): MorpionState => ({
   grid: EMPTY_GRID,
   current: first,
   phase: 'placement',
+  variant,
+  heart: variant === 'moving-heart' ? HEART_PATH[0] : null,
+  movesUntilShift: HEART_PERIOD,
   placed: { X: 0, O: 0 },
   status: { kind: 'playing' },
   lastMove: null,
@@ -93,9 +126,19 @@ export const createMorpion = (first: Mark = 'X'): MorpionState => ({
   positionCounts: {},
 });
 
+/**
+ * Les alignements qui comptent. Le cœur neutralise ceux qui le traversent :
+ * posé au centre il en désactive quatre, sur un coin trois.
+ */
+export const activeLines = (heart: number | null): readonly Line[] =>
+  heart === null ? LINES : LINES.filter((line) => !line.includes(heart));
+
 /** La ligne gagnante d'une grille, s'il y en a une. */
-export const findWinningLine = (grid: Grid): { mark: Mark; line: Line } | null => {
-  for (const line of LINES) {
+export const findWinningLine = (
+  grid: Grid,
+  heart: number | null = null,
+): { mark: Mark; line: Line } | null => {
+  for (const line of activeLines(heart)) {
     const [a, b, c] = line;
     const mark = grid[a];
     if (mark && mark === grid[b] && mark === grid[c]) return { mark, line };
@@ -158,7 +201,7 @@ export const playMorpion = (
       ? { ...state.placed, [state.current]: state.placed[state.current] + 1 }
       : state.placed;
 
-  const won = findWinningLine(grid);
+  const won = findWinningLine(grid, state.heart);
   if (won) {
     return {
       ...state,
@@ -182,7 +225,21 @@ export const playMorpion = (
   // du surplace.
   const idleMoves = move.type === 'place' ? 0 : state.idleMoves + 1;
 
-  const key = positionKey(grid, next);
+  // Le cœur ne bouge que pendant la phase de déplacement : le faire glisser
+  // pendant la pose rendrait la position illisible avant même de jouer.
+  // Le compteur suit les déplacements, pas les poses : le coup qui fait entrer
+  // en phase 2 est encore une pose et ne doit rien décompter.
+  const shifting = state.variant === 'moving-heart' && move.type === 'move';
+  const countdown = shifting ? state.movesUntilShift - 1 : state.movesUntilShift;
+  const shifts = shifting && countdown <= 0;
+
+  const heart = shifts
+    ? HEART_PATH[(HEART_PATH.indexOf(state.heart ?? HEART_PATH[0]) + 1) % HEART_PATH.length]
+    : state.heart;
+
+  // La position inclut le cœur : la même grille sous deux cœurs différents
+  // n'offre pas les mêmes alignements, ce n'est donc pas une répétition.
+  const key = positionKey(grid, next, heart);
   const positionCounts =
     phase === 'movement'
       ? { ...state.positionCounts, [key]: (state.positionCounts[key] ?? 0) + 1 }
@@ -192,12 +249,26 @@ export const playMorpion = (
     grid,
     current: next,
     phase,
+    variant: state.variant,
+    heart,
+    movesUntilShift: shifts ? HEART_PERIOD : countdown,
     placed,
     status: { kind: 'playing' },
     lastMove: move,
     idleMoves,
     positionCounts,
   };
+
+  // Le cœur venant de bouger peut libérer un alignement déjà formé.
+  if (shifts) {
+    const revealed = findWinningLine(grid, heart);
+    if (revealed) {
+      return {
+        ...draft,
+        status: { kind: 'win', winner: revealed.mark, line: revealed.line },
+      };
+    }
+  }
 
   if ((positionCounts[key] ?? 0) >= REPETITION_LIMIT) {
     return { ...draft, status: { kind: 'draw', reason: 'repetition' } };
@@ -259,7 +330,7 @@ const evaluate = (state: MorpionState, me: Mark, attackBias: number): number => 
   const enemy = other(me);
   let score = 0;
 
-  for (const [a, b, c] of LINES) {
+  for (const [a, b, c] of activeLines(state.heart)) {
     const cells = [state.grid[a], state.grid[b], state.grid[c]];
     const mine = cells.filter((cell) => cell === me).length;
     const theirs = cells.filter((cell) => cell === enemy).length;
@@ -269,8 +340,12 @@ const evaluate = (state: MorpionState, me: Mark, attackBias: number): number => 
     if (mine === 1 && theirs === 0) score += 1;
   }
 
-  if (state.grid[4] === me) score += 4;
-  if (state.grid[4] === enemy) score -= 4;
+  // Occuper une case chargée d'alignements vaut mieux qu'une case morte.
+  for (const cell of [0, 2, 4, 6, 8]) {
+    const weight = activeLines(state.heart).filter((line) => line.includes(cell)).length;
+    if (state.grid[cell] === me) score += weight;
+    if (state.grid[cell] === enemy) score -= weight;
+  }
 
   return score;
 };
@@ -312,7 +387,7 @@ const search = (
   if (state.status.kind === 'draw') return 0;
   if (depth <= 0) return evaluate(state, ctx.me, ctx.attackBias);
 
-  const key = positionKey(state.grid, state.current);
+  const key = positionKey(state.grid, state.current, state.heart);
   // Boucler ramène au même point : on traite le cycle comme une nulle plutôt
   // que de l'explorer indéfiniment.
   if (state.phase === 'movement' && ctx.path.has(key)) return 0;

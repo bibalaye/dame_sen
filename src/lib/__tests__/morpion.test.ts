@@ -2,8 +2,11 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  HEART_PATH,
+  HEART_PERIOD,
   MORPION_OPPONENTS,
   NO_WIN_LIMIT,
+  activeLines,
   PIECES_PER_PLAYER,
   availableMoves,
   bestMove,
@@ -26,12 +29,19 @@ const gridFrom = (rows: string): Grid =>
   [...rows.replace(/\s/g, '')].map((c) => (c === '.' ? null : (c as Mark)));
 
 /** Position de phase 2 : les six pions sont posés. */
-const movementState = (rows: string, current: Mark): MorpionState => {
+const movementState = (
+  rows: string,
+  current: Mark,
+  heart: number | null = null,
+): MorpionState => {
   const grid = gridFrom(rows);
   return {
     grid,
     current,
     phase: 'movement',
+    variant: heart === null ? 'classic' : 'moving-heart',
+    heart,
+    movesUntilShift: HEART_PERIOD,
     placed: { X: PIECES_PER_PLAYER, O: PIECES_PER_PLAYER },
     status: { kind: 'playing' },
     lastMove: null,
@@ -309,5 +319,95 @@ describe('confort', () => {
   test('la réflexion n’est ni instantanée ni interminable', () => {
     assert.ok(morpionThinkingDelay(() => 0) >= 320);
     assert.ok(morpionThinkingDelay(() => 0.999) < 800);
+  });
+});
+
+describe('cœur mouvant', () => {
+  test('la variante classique n’a pas de cœur', () => {
+    const state = createMorpion('X', 'classic');
+    assert.equal(state.heart, null);
+    assert.equal(activeLines(null).length, 8);
+  });
+
+  test('le cœur au centre neutralise quatre alignements', () => {
+    // Le centre porte quatre lignes : il en reste donc quatre actives.
+    assert.equal(activeLines(4).length, 4);
+    // Un coin n'en porte que trois.
+    assert.equal(activeLines(0).length, 5);
+    // Un bord, deux.
+    assert.equal(activeLines(1).length, 6);
+  });
+
+  test('un alignement qui traverse le cœur ne gagne pas', () => {
+    const grid = gridFrom('XXX OO. ...');
+    // Sans cœur, la rangée du haut gagne.
+    assert.ok(findWinningLine(grid, null));
+    // Avec le cœur sur la case 1, cette même rangée ne compte plus.
+    assert.equal(findWinningLine(grid, 1), null);
+  });
+
+  test('le cœur reste immobile pendant la pose', () => {
+    let state = createMorpion('X', 'moving-heart');
+    assert.equal(state.heart, HEART_PATH[0]);
+
+    for (const cell of [0, 1, 3, 2, 7, 5]) {
+      state = playMorpion(state, place(cell));
+      assert.equal(state.heart, HEART_PATH[0], `le cœur a bougé sur la pose ${cell}`);
+    }
+    assert.equal(state.phase, 'movement');
+  });
+
+  test('il change de case après trois tours de déplacement', () => {
+    let state = createMorpion('X', 'moving-heart');
+    for (const cell of [0, 1, 3, 2, 7, 5]) state = playMorpion(state, place(cell));
+
+    const before = state.heart;
+    assert.equal(state.movesUntilShift, HEART_PERIOD);
+
+    // Six demi-coups de déplacement : le cœur doit alors avancer d'un cran.
+    for (let i = 0; i < HEART_PERIOD && state.status.kind === 'playing'; i++) {
+      const options = availableMoves(state);
+      // On choisit un déplacement qui n'aligne rien, pour aller au bout.
+      const quiet = options.find(
+        (m) => playMorpion(state, m).status.kind === 'playing',
+      );
+      if (!quiet) break;
+      state = playMorpion(state, quiet);
+    }
+
+    assert.notEqual(state.heart, before, 'le cœur doit avoir changé de case');
+    assert.ok(HEART_PATH.includes(state.heart!));
+  });
+
+  test('la même grille sous deux cœurs n’est pas une répétition', () => {
+    const withHeartA = movementState('X.O XO. .XO', 'X', 4);
+    const withHeartB = movementState('X.O XO. .XO', 'X', 0);
+
+    // Les alignements disponibles diffèrent : ce ne sont pas les mêmes positions.
+    assert.notDeepEqual(activeLines(withHeartA.heart), activeLines(withHeartB.heart));
+  });
+
+  test('le cœur mouvant fait disparaître les nulles par répétition', () => {
+    // Mesuré : 23 % de nulles en classique entre deux niveaux moyens, aucune
+    // avec le cœur mouvant, parce qu'aucune position d'équilibre ne tient.
+    let draws = 0;
+    const rounds = 10;
+
+    for (let seed = 1; seed <= rounds; seed++) {
+      const random = seeded(seed);
+      let state = createMorpion('X', 'moving-heart');
+      let guard = 0;
+
+      while (state.status.kind === 'playing' && guard++ < 300) {
+        const next = findBestMorpionMove(state, 'medium', random);
+        if (!next) break;
+        state = playMorpion(state, next);
+      }
+
+      assert.notEqual(state.status.kind, 'playing', 'la partie doit se conclure');
+      if (state.status.kind === 'draw') draws++;
+    }
+
+    assert.ok(draws <= 1, `${draws} nulles sur ${rounds} : la variante ne tient pas`);
   });
 });

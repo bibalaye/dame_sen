@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useGameContext, type GameKind, type GameMode } from '@/context/GameContext';
 import { TIME_CONTROLS, type TimeControl } from '@/lib/clock';
-import { MORPION_OPPONENTS } from '@/lib/morpion';
+import { MORPION_OPPONENTS, type MorpionVariant } from '@/lib/morpion';
 import type { Difficulty } from '@/lib/ai';
 import styles from './HomeScreen.module.css';
 
@@ -41,6 +41,19 @@ const MODES: ReadonlyArray<{
 ];
 
 const TIME_OPTIONS: readonly TimeControl[] = ['none', 'blitz', 'bullet'];
+
+const MORPION_VARIANTS: ReadonlyArray<{
+  id: MorpionVariant;
+  label: string;
+  detail: string;
+}> = [
+  {
+    id: 'moving-heart',
+    label: 'Cœur mouvant',
+    detail: 'Une case neutralise ses alignements, et se déplace tous les trois tours',
+  },
+  { id: 'classic', label: 'Classique', detail: 'Les huit alignements comptent en permanence' },
+];
 
 /** Aperçu du plateau, dessiné en CSS : un jeu se choisit sur image, pas sur mot. */
 const BoardPreview: React.FC<{ kind: GameKind }> = ({ kind }) => {
@@ -91,6 +104,7 @@ const HomeScreen: React.FC = () => {
   const [mode, setMode] = useState<GameMode>('solo');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [timeControl, setTimeControl] = useState<TimeControl>('none');
+  const [morpionVariant, setMorpionVariant] = useState<MorpionVariant>('moving-heart');
 
   const modes = MODES.filter((entry) => kind === 'dames' || !entry.damesOnly);
 
@@ -195,6 +209,30 @@ const HomeScreen: React.FC = () => {
           </section>
         )}
 
+        {kind === 'morpion' && (
+          <section className={styles.section}>
+            <h2 className={styles.label}>Règle</h2>
+            <div className={styles.segments} role="group">
+              {MORPION_VARIANTS.map((entry) => (
+                <button
+                  key={entry.id}
+                  type="button"
+                  className={`${styles.segment} ${
+                    morpionVariant === entry.id ? styles.segmentOn : ''
+                  }`}
+                  onClick={() => setMorpionVariant(entry.id)}
+                  aria-pressed={morpionVariant === entry.id}
+                >
+                  {entry.label}
+                </button>
+              ))}
+            </div>
+            <p className={styles.hint}>
+              {MORPION_VARIANTS.find((entry) => entry.id === morpionVariant)?.detail}
+            </p>
+          </section>
+        )}
+
         {kind === 'dames' && mode !== 'daily' && (
           <section className={styles.section}>
             <h2 className={styles.label}>Cadence</h2>
@@ -221,7 +259,9 @@ const HomeScreen: React.FC = () => {
         <button
           type="button"
           className={styles.play}
-          onClick={() => startGame({ kind, mode, difficulty, timeControl })}
+          onClick={() =>
+            startGame({ kind, mode, difficulty, timeControl, morpionVariant })
+          }
         >
           {cta}
           <span className={styles.playIcon} aria-hidden="true">

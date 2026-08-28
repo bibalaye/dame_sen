@@ -11,7 +11,7 @@ import type { MorpionDifficulty } from '@/lib/morpion';
  * choisi et le mode viennent du contexte, renseignés au lancement.
  */
 export default function Page() {
-  const { screen, kind, mode, difficulty } = useGameContext();
+  const { screen, kind, mode, difficulty, morpionVariant } = useGameContext();
 
   if (screen === 'home') {
     return (
@@ -30,7 +30,7 @@ export default function Page() {
 
     return (
       <main>
-        <Morpion mode={localMode} difficulty={level} />
+        <Morpion mode={localMode} difficulty={level} variant={morpionVariant} />
       </main>
     );
   }
