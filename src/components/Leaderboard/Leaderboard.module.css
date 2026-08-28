@@ -1,0 +1,98 @@
+/*
+ * Contenu de la fenêtre « classement ». La modale fournit le fond et les
+ * marges : on ne fait ici que de la mise en page.
+ */
+
+.state,
+.note {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.note {
+  margin-top: 14px;
+  font-size: 0.74rem;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* La liste défile dans son cadre : la modale ne s'allonge pas avec elle. */
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-sunk);
+}
+
+/* Sa propre ligne se repère d'un coup d'œil, sans avoir à lire les pseudos. */
+.mine {
+  border-color: var(--brass);
+  background: color-mix(in srgb, var(--brass) 14%, var(--surface));
+}
+
+.rank {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.mine .rank {
+  color: var(--brass-ink);
+}
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text);
+  /* Un pseudo long ne doit pas pousser le score hors du cadre. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.you {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 50px;
+  background: var(--brass);
+  color: #201404;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.score {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: var(--font-display);
+  color: var(--text);
+}
+
+.played {
+  font-family: inherit;
+  font-size: 0.72rem;
+  color: var(--text-soft);
+}

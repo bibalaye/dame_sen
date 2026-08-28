@@ -101,3 +101,28 @@
     transition: none;
   }
 }
+
+/* Un jeu verrouillé se montre, en retrait : on voit ce qu'on peut viser. */
+.cardLocked {
+  opacity: 0.62;
+}
+
+.cardLocked:disabled {
+  cursor: not-allowed;
+}
+
+.cardLocked .preview {
+  filter: grayscale(0.55);
+}
+
+/* Prix atteignable : la carte devient une invitation. */
+.badgeBuy {
+  background: var(--green);
+  color: #ffffff;
+}
+
+.badgeLocked {
+  background: var(--surface-sunk);
+  color: var(--text-soft);
+  border: 1px solid var(--line);
+}

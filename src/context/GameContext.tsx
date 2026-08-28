@@ -74,6 +74,30 @@ import {
   type PieceSet,
   type PieceSetId,
 } from '@/lib/pieceSets';
+import { computeStats } from '@/lib/history';
+import {
+  EMPTY_WALLET,
+  credit,
+  gameRewards,
+  isUnlocked,
+  loadWallet,
+  registerVisit,
+  saveWallet,
+  totalOf,
+  unlock as unlockSet,
+  type RewardReason,
+  type Wallet,
+} from '@/lib/economy';
+import { useAccount } from './AccountContext';
+import type { PlayerProfile } from '@/lib/profile';
+import { EMPTY_DAILY, mergeProfiles } from '@/lib/profile';
+import {
+  claimDailyVisit,
+  recordDailyRemote,
+  recordGameRemote,
+  setPieceSetRemote,
+  unlockPieceSetRemote,
+} from '@/lib/supabase/remote';
 import {
   addEntry,
   clearHistory as clearStoredHistory,
@@ -161,6 +185,12 @@ interface GameContextType {
   /** Jeu de pions choisi par le joueur, commun aux deux plateaux. */
   pieceSet: PieceSet;
   setPieceSet: (id: PieceSetId) => void;
+  /** Étoiles gagnées et jeux de pions débloqués. */
+  wallet: Wallet;
+  unlockPieceSet: (id: PieceSetId) => void;
+  /** Gains du dernier événement, à annoncer au joueur. */
+  lastRewards: readonly RewardReason[];
+  clearRewards: () => void;
   /** Change à chaque nouvelle partie : sert à réinitialiser les animations. */
   gameId: number;
   BOARD_SIZE: number;
@@ -324,6 +354,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [clock, setClock] = useState<ClockState>(() => createClock('none', 0));
   const [muted, setMutedState] = useState(false);
   const [pieceSetId, setPieceSetId] = useState<PieceSetId>(DEFAULT_PIECE_SET);
+  const [wallet, setWallet] = useState<Wallet>(EMPTY_WALLET);
+  const [lastRewards, setLastRewards] = useState<readonly RewardReason[]>([]);
   const [daily, setDaily] = useState<DailyState | null>(null);
   /** Plus longue rafle réussie dans la partie en cours, pour la carte finale. */
   const [bestChain, setBestChain] = useState(0);
@@ -335,19 +367,69 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setHistory(loadHistory());
   }, []);
 
+  // --- Compte -------------------------------------------------------------
+
+  const {
+    account,
+    isLoading: accountLoading,
+    remoteProfile,
+    provideLocalProfile,
+  } = useAccount();
+
+  /**
+   * Le compte change la destination des écritures, pas leur nature : connecté,
+   * c'est le serveur qui accorde les étoiles ; sinon, le navigateur les
+   * conserve. Les refs évitent de recréer les fonctions de jeu à chaque
+   * changement de solde.
+   */
+  const accountRef = useRef(account);
+  accountRef.current = account;
+
+  const walletRef = useRef(wallet);
+  walletRef.current = wallet;
+
+  /** Applique un solde décidé par le serveur. */
+  const applyRemoteStars = useCallback(
+    (stars: number, rewards: readonly RewardReason[]) => {
+      setWallet((current) => {
+        const next: Wallet = {
+          ...current,
+          stars,
+          // Le serveur ne renvoie que le solde ; le total gagné se déduit des
+          // gains qu'il vient d'accorder.
+          earned: current.earned + totalOf(rewards),
+        };
+        saveWallet(next);
+        return next;
+      });
+      if (rewards.length > 0) setLastRewards(rewards);
+    },
+    [],
+  );
+
   /** Consigne une partie terminée, quel que soit le jeu. */
   const recordGame = useCallback(
     (entry: Omit<HistoryEntry, 'id'>) => {
+      const full: HistoryEntry = {
+        ...entry,
+        id: makeEntryId(entry.playedAt, entry.game),
+      };
+
+      // L'appareil garde toujours sa copie : elle sert de cache hors ligne et
+      // reste la seule trace pour qui joue sans compte.
       setHistory((current) => {
-        const next = addEntry(current, {
-          ...entry,
-          id: makeEntryId(entry.playedAt, entry.game),
-        });
+        const next = addEntry(current, full);
         saveHistory(next);
         return next;
       });
+
+      if (!accountRef.current) return;
+
+      void recordGameRemote(full, walletRef.current.stars).then((outcome) => {
+        if (outcome) applyRemoteStars(outcome.stars, outcome.rewards);
+      });
     },
-    [],
+    [applyRemoteStars],
   );
 
   const gameRef = useRef(game);
@@ -367,16 +449,145 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     setMutedState(loadMutePreference());
     setPieceSetId(loadPieceSet());
+    setWallet(loadWallet());
     preloadSounds();
   }, []);
 
+  /**
+   * La venue du jour attend de savoir si un compte est ouvert. La créditer
+   * avant la réponse du serveur ferait bouger le solde deux fois — et
+   * l'horloge d'un téléphone ne doit pas décider des gains d'un compte.
+   */
+  const visitClaimed = useRef(false);
+  useEffect(() => {
+    if (accountLoading || visitClaimed.current) return;
+    visitClaimed.current = true;
+
+    if (account) {
+      void claimDailyVisit(walletRef.current.stars).then((outcome) => {
+        if (outcome) applyRemoteStars(outcome.stars, outcome.rewards);
+      });
+      return;
+    }
+
+    const stored = loadWallet();
+    const today = Math.floor(Date.now() / 86_400_000);
+    const outcome = registerVisit(stored, today);
+    if (outcome.rewards.length === 0) return;
+
+    setWallet(outcome.wallet);
+    saveWallet(outcome.wallet);
+    setLastRewards(outcome.rewards);
+  }, [accountLoading, account, applyRemoteStars]);
+
+  /**
+   * Ce que l'appareil détient, transmis au contexte des comptes : c'est la
+   * matière de la fusion à la connexion et de la reprise à l'inscription.
+   */
+  useEffect(() => {
+    provideLocalProfile({
+      wallet,
+      history,
+      daily: loadProgress(),
+      pieceSet: pieceSetId,
+    });
+  }, [wallet, history, pieceSetId, provideLocalProfile]);
+
+  /**
+   * Le profil du compte prend la main. La fusion garde les parties jouées hors
+   * ligne sur cet appareil : se connecter ne doit jamais effacer une partie.
+   */
+  const localSnapshot = useRef<PlayerProfile | null>(null);
+  localSnapshot.current = { wallet, history, daily: EMPTY_DAILY, pieceSet: pieceSetId };
+
+  useEffect(() => {
+    if (!remoteProfile) return;
+
+    const merged = mergeProfiles(
+      localSnapshot.current ?? remoteProfile,
+      remoteProfile,
+    );
+
+    setWallet(merged.wallet);
+    setHistory([...merged.history]);
+    setPieceSetId(merged.pieceSet);
+
+    saveWallet(merged.wallet);
+    saveHistory(merged.history);
+    savePieceSet(merged.pieceSet);
+    saveProgress(merged.daily);
+    // `localSnapshot` est volontairement absent des dépendances : c'est une ref
+    // lue au moment où le profil distant arrive, pas un déclencheur.
+  }, [remoteProfile]);
+
+  /**
+   * Crédite des gains. Sans compte, l'appareil fait foi ; avec un compte, seul
+   * le serveur crédite — un solde calculé ici serait écrasé au prochain
+   * chargement, et se contournerait depuis la console du navigateur.
+   */
+  const earn = useCallback((reasons: readonly RewardReason[]) => {
+    if (reasons.length === 0) return;
+    if (accountRef.current) return;
+
+    setWallet((current) => {
+      const next = reasons.reduce((acc, reason) => credit(acc, reason), current);
+      saveWallet(next);
+      return next;
+    });
+    setLastRewards(reasons);
+  }, []);
+
+  const unlockPieceSet = useCallback(
+    (id: PieceSetId) => {
+      if (accountRef.current) {
+        void unlockPieceSetRemote(id).then((outcome) => {
+          if (!outcome.ok) {
+            setNotice(outcome.error);
+            return;
+          }
+          setWallet((current) => {
+            const next: Wallet = {
+              ...current,
+              stars: outcome.value.stars,
+              unlocked: outcome.value.unlocked,
+            };
+            saveWallet(next);
+            return next;
+          });
+          play('promote');
+        });
+        return;
+      }
+
+      setWallet((current) => {
+        const next = unlockSet(current, id);
+        if (next === current) return current;
+        saveWallet(next);
+        return next;
+      });
+      play('promote');
+    },
+    [],
+  );
+
+  const clearRewards = useCallback(() => setLastRewards([]), []);
+
   const pieceSet = useMemo(() => findPieceSet(pieceSetId), [pieceSetId]);
 
-  const setPieceSet = useCallback((id: PieceSetId) => {
-    setPieceSetId(id);
-    savePieceSet(id);
-    play('select');
-  }, []);
+  const setPieceSet = useCallback(
+    (id: PieceSetId) => {
+      // Un jeu verrouillé ne se sélectionne pas : le sélecteur propose de le
+      // débloquer, il ne le met pas en jeu par mégarde.
+      if (!isUnlocked(wallet, id)) return;
+      setPieceSetId(id);
+      savePieceSet(id);
+      // Le choix suit le compte d'un appareil à l'autre. S'il ne part pas, le
+      // jeu reste jouable : c'est une préférence, pas un acquis.
+      if (accountRef.current) void setPieceSetRemote(id);
+      play('select');
+    },
+    [wallet],
+  );
 
   /**
    * Un lien d'invitation amène directement dans la salle : on bascule en mode
@@ -584,6 +795,9 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const mine: Player = mode === 'online' ? (playerType ?? 'white') : 'white';
     const result: GameResult = !winner ? 'draw' : winner === mine ? 'win' : 'loss';
 
+    // Les étoiles suivent le résultat, série de victoires comprise.
+    earn(gameRewards(result === 'win', computeStats(history).currentStreak + 1));
+
     recordGame({
       game: 'dames',
       mode,
@@ -607,6 +821,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     opponent,
     bestChain,
     recordGame,
+    earn,
+    history,
   ]);
 
   const shareResult = useCallback(() => {
@@ -759,10 +975,24 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       saveProgress(progress);
       streak = progress.streak;
       play(solved ? 'win' : 'lose');
+
+      // Le défi rapporte des étoiles : le serveur en décide quand un compte est
+      // ouvert, l'appareil sinon.
+      if (accountRef.current) {
+        void recordDailyRemote(
+          daily.puzzle.number,
+          solved,
+          walletRef.current.stars,
+        ).then((outcome) => {
+          if (outcome) applyRemoteStars(outcome.stars, outcome.rewards);
+        });
+      } else if (solved) {
+        earn(['daily-solved']);
+      }
     }
 
     setDaily({ ...daily, attempts, solved, finished, streak });
-  }, [game, mode, daily]);
+  }, [game, mode, daily, earn, applyRemoteStars]);
 
   const retryDaily = useCallback(() => {
     if (!daily || daily.finished) return;
@@ -966,6 +1196,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       muted,
       pieceSet,
       setPieceSet,
+      wallet,
+      unlockPieceSet,
+      lastRewards,
+      clearRewards,
       gameId,
       BOARD_SIZE,
       isMultiplayer,
@@ -1038,11 +1272,15 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       acknowledgeOpponentLeft,
       opponent,
       opponentLeft,
+      clearRewards,
+      lastRewards,
       pieceSet,
       playerType,
       requestHint,
       rules,
       setPieceSet,
+      unlockPieceSet,
+      wallet,
       resetGame,
       retryDaily,
       roomId,

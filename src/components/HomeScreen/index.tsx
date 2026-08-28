@@ -5,8 +5,10 @@ import Image from 'next/image';
 import StatsPanel from '../StatsPanel';
 import PieceSetPicker from '../PieceSetPicker';
 import RulesPicker from '../RulesPicker';
+import AccountPanel from '../AccountPanel';
 import { computeStats } from '@/lib/history';
 import { useGameContext, type GameKind, type GameMode } from '@/context/GameContext';
+import { useAccount } from '@/context/AccountContext';
 import { TIME_CONTROLS, type TimeControl } from '@/lib/clock';
 import { MORPION_OPPONENTS, type MorpionVariant } from '@/lib/morpion';
 import { DEFAULT_RULES, type RuleSet } from '@/lib/engine';
@@ -119,7 +121,9 @@ const Level: React.FC<{ value: number; total: number }> = ({ value, total }) => 
 );
 
 const HomeScreen: React.FC = () => {
-  const { startGame, history, pieceSet } = useGameContext();
+  const { startGame, history, pieceSet, wallet } = useGameContext();
+  const { account } = useAccount();
+  const [accountOpen, setAccountOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [piecesOpen, setPiecesOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -172,6 +176,21 @@ const HomeScreen: React.FC = () => {
         <header className={styles.header}>
           <p className={styles.brand}>Teraanga Games</p>
           <h1 className={styles.title}>Jeux de plateau du Sénégal</h1>
+
+          {/* Le compte se tient à l'écart du parcours de jeu : visible, jamais
+              sur le chemin de qui veut seulement lancer une partie. */}
+          <button
+            type="button"
+            className={`uiRound ${styles.account}`}
+            onClick={() => setAccountOpen(true)}
+            aria-label={account ? `Compte de ${account.displayName}` : 'Se connecter'}
+          >
+            {account ? (
+              account.displayName.slice(0, 1).toUpperCase()
+            ) : (
+              <Image src="/assets/ui/star-empty.png" alt="" width={18} height={17} />
+            )}
+          </button>
         </header>
 
         {/* Tout le réglage tient dans un seul panneau : une fiche à remplir,
@@ -338,7 +357,10 @@ const HomeScreen: React.FC = () => {
                 <Image src={pieceSet.light} alt="" width={22} height={22} />
                 <Image src={pieceSet.dark} alt="" width={22} height={22} />
               </span>
-              <span className={styles.chipText}>{pieceSet.name}</span>
+              <span className={styles.chipText}>
+                {pieceSet.name}
+                <span className={styles.chipStars}>{wallet.stars} ★</span>
+              </span>
             </button>
 
             <button
@@ -358,6 +380,7 @@ const HomeScreen: React.FC = () => {
         </div>
       </div>
 
+      {accountOpen && <AccountPanel onClose={() => setAccountOpen(false)} />}
       {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
       {piecesOpen && <PieceSetPicker onClose={() => setPiecesOpen(false)} />}
       {rulesOpen && (

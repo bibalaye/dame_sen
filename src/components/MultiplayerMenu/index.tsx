@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useAccount } from '@/context/AccountContext';
 import { useGameContext } from '@/context/GameContext';
 import styles from './MultiplayerMenu.module.css';
 
@@ -19,7 +20,10 @@ const MultiplayerMenu: React.FC = () => {
     startGame,
   } = useGameContext();
 
-  const [username, setUsername] = useState('');
+  // Un joueur connecté ne retape pas son pseudo : c'est celui de son compte
+  // qui s'affiche à l'adversaire, et il reste modifiable pour la partie.
+  const { account } = useAccount();
+  const [username, setUsername] = useState(account?.displayName ?? '');
   const [roomIdInput, setRoomIdInput] = useState(invitedRoom ?? '');
   const [view, setView] = useState<'main' | 'create' | 'join'>(
     invitedRoom ? 'join' : 'main',

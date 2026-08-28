@@ -31,6 +31,7 @@
 /* --- Titre ---------------------------------------------------------------- */
 
 .header {
+  position: relative;
   text-align: center;
 }
 
@@ -437,4 +438,26 @@
 .rulesMore {
   font-size: 0.76rem;
   color: var(--text-soft);
+}
+
+/* Le solde d'étoiles, sous le nom du jeu de pions en cours. */
+.chipStars {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--brass-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Le bouton du compte se pose dans l'angle de l'en-tête : atteignable au pouce,
+   hors du chemin de qui veut seulement lancer une partie. */
+.account {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 42px;
+  height: 42px;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  line-height: 1;
 }

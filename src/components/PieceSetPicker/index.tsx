@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Modal from '../Modal';
 import { useGameContext } from '@/context/GameContext';
 import { PIECE_SETS } from '@/lib/pieceSets';
+import { canAfford, isUnlocked, priceOf } from '@/lib/economy';
 import styles from './PieceSetPicker.module.css';
 
 interface PieceSetPickerProps {
@@ -19,7 +20,7 @@ interface PieceSetPickerProps {
  * d'une session à l'autre.
  */
 const PieceSetPicker: React.FC<PieceSetPickerProps> = ({ onClose }) => {
-  const { pieceSet, setPieceSet } = useGameContext();
+  const { pieceSet, setPieceSet, wallet, unlockPieceSet } = useGameContext();
 
   return (
     <Modal title="Vos pions" onClose={onClose}>
@@ -28,8 +29,17 @@ const PieceSetPicker: React.FC<PieceSetPickerProps> = ({ onClose }) => {
           <button
             key={set.id}
             type="button"
-            className={`${styles.card} ${pieceSet.id === set.id ? styles.cardOn : ''}`}
-            onClick={() => setPieceSet(set.id)}
+            className={[
+              styles.card,
+              pieceSet.id === set.id ? styles.cardOn : '',
+              !isUnlocked(wallet, set.id) ? styles.cardLocked : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            onClick={() =>
+              isUnlocked(wallet, set.id) ? setPieceSet(set.id) : unlockPieceSet(set.id)
+            }
+            disabled={!isUnlocked(wallet, set.id) && !canAfford(wallet, set.id)}
             aria-pressed={pieceSet.id === set.id}
           >
             <span className={styles.preview}>
@@ -47,18 +57,27 @@ const PieceSetPicker: React.FC<PieceSetPickerProps> = ({ onClose }) => {
             <span className={styles.name}>{set.name}</span>
             <span className={styles.detail}>{set.detail}</span>
 
-            {pieceSet.id === set.id && (
+            {pieceSet.id === set.id ? (
               <span className={styles.badge} aria-hidden="true">
                 En jeu
               </span>
-            )}
+            ) : !isUnlocked(wallet, set.id) ? (
+              <span
+                className={`${styles.badge} ${
+                  canAfford(wallet, set.id) ? styles.badgeBuy : styles.badgeLocked
+                }`}
+              >
+                {priceOf(set.id)} ★
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
 
       <p className={styles.note}>
         Le troisième pion montre la dame : la pièce empilée qu’un pion devient en
-        atteignant la dernière rangée.
+        atteignant la dernière rangée. Les étoiles se gagnent en jouant —
+        vous en avez <strong>{wallet.stars}</strong>.
       </p>
     </Modal>
   );
