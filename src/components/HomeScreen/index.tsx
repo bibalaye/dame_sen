@@ -18,42 +18,72 @@ export const OPPONENTS: ReadonlyArray<{
   { id: 'expert', name: 'Le vieux', tagline: 'Sous le manguier depuis 40 ans' },
 ];
 
-const GAMES: ReadonlyArray<{ id: GameKind; name: string; detail: string }> = [
-  { id: 'dames', name: 'Dames', detail: 'Plateau 5×5, rafles et dames' },
-  { id: 'morpion', name: 'Morpion', detail: 'Trois marques alignées' },
+const GAMES: ReadonlyArray<{
+  id: GameKind;
+  name: string;
+  detail: string;
+}> = [
+  { id: 'dames', name: 'Dames', detail: '5×5 · rafles' },
+  { id: 'morpion', name: 'Morpion', detail: '3 pions · 2 phases' },
 ];
 
 const MODES: ReadonlyArray<{
   id: GameMode;
-  title: string;
+  label: string;
   detail: string;
-  /** Le défi du jour repose sur une position de dames : lui seul est réservé. */
+  /** Le défi du jour repose sur une position de dames. */
   damesOnly?: boolean;
 }> = [
-  {
-    id: 'daily',
-    title: 'Défi du jour',
-    detail: 'Une position, la même pour tous, trois essais',
-    damesOnly: true,
-  },
-  {
-    id: 'solo',
-    title: 'Jouer seul',
-    detail: 'Contre un adversaire à votre mesure',
-  },
-  {
-    id: 'pass',
-    title: 'Autour du plateau',
-    detail: 'À deux sur le même appareil',
-  },
-  {
-    id: 'online',
-    title: 'À distance',
-    detail: 'Créez une partie et partagez le lien',
-  },
+  { id: 'solo', label: 'Solo', detail: 'Contre la machine' },
+  { id: 'pass', label: 'À deux', detail: 'Sur cet appareil' },
+  { id: 'online', label: 'En ligne', detail: 'Par lien partagé' },
+  { id: 'daily', label: 'Défi', detail: 'Le puzzle du jour', damesOnly: true },
 ];
 
 const TIME_OPTIONS: readonly TimeControl[] = ['none', 'blitz', 'bullet'];
+
+/** Aperçu du plateau, dessiné en CSS : un jeu se choisit sur image, pas sur mot. */
+const BoardPreview: React.FC<{ kind: GameKind }> = ({ kind }) => {
+  if (kind === 'morpion') {
+    // Trois pions posés, une grille de neuf cases.
+    const marks: Record<number, 'x' | 'o'> = { 0: 'x', 4: 'o', 8: 'x', 2: 'o' };
+    return (
+      <span className={`${styles.preview} ${styles.previewMorpion}`} aria-hidden="true">
+        {Array.from({ length: 9 }, (_, i) => (
+          <span key={i} className={styles.previewCell}>
+            {marks[i] && (
+              <span
+                className={marks[i] === 'x' ? styles.previewCross : styles.previewRound}
+              />
+            )}
+          </span>
+        ))}
+      </span>
+    );
+  }
+
+  // Damier 5×5 avec les deux camps face à face.
+  return (
+    <span className={`${styles.preview} ${styles.previewDames}`} aria-hidden="true">
+      {Array.from({ length: 25 }, (_, i) => {
+        const row = Math.floor(i / 5);
+        const side = row < 2 ? 'light' : row > 2 ? 'dark' : null;
+        return (
+          <span
+            key={i}
+            className={`${styles.previewCell} ${(row + i) % 2 ? styles.previewAlt : ''}`}
+          >
+            {side && (
+              <span
+                className={side === 'light' ? styles.previewLight : styles.previewDark}
+              />
+            )}
+          </span>
+        );
+      })}
+    </span>
+  );
+};
 
 const HomeScreen: React.FC = () => {
   const { startGame } = useGameContext();
@@ -77,117 +107,126 @@ const HomeScreen: React.FC = () => {
   const handleKind = (next: GameKind) => {
     setKind(next);
     if (next === 'morpion') {
-      // Le défi du jour repose sur une position de dames.
       if (mode === 'daily') setMode('solo');
       if (difficulty === 'expert') setDifficulty('hard');
     }
   };
 
+  const cta =
+    mode === 'online' ? 'Créer ou rejoindre' : mode === 'daily' ? 'Relever le défi' : 'Jouer';
+
   return (
     <div className={styles.screen}>
-      <header className={styles.header}>
-        <p className={styles.eyebrow}>Jeux de plateau du Sénégal</p>
-        <h1 className={styles.title}>
-          {kind === 'dames' ? 'Dames sénégalaises' : 'Morpion'}
-        </h1>
-        <p className={styles.pitch}>
-          {kind === 'dames'
-            ? 'Cinq cases sur cinq, tout en lignes droites. La prise est obligatoire, et une rafle bien vue renverse une partie.'
-            : 'Trois pions chacun : on les pose, puis on les déplace jusqu’à en aligner trois. Deux phases, et jamais de position figée.'}
-        </p>
-      </header>
+      <div className={styles.inner}>
+        <header className={styles.header}>
+          <span className={styles.brand}>Teraanga Games</span>
+          <h1 className={styles.title}>
+            Jeux de plateau
+            <span className={styles.titleAccent}>du Sénégal</span>
+          </h1>
+        </header>
 
-      <div className={styles.panel}>
-        <fieldset className={styles.group}>
-          <legend className={styles.legend}>Le jeu</legend>
+        <section className={styles.section}>
+          <h2 className={styles.label}>Le jeu</h2>
           <div className={styles.games}>
             {GAMES.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
-                className={`${styles.game} ${kind === entry.id ? styles.gameActive : ''}`}
+                className={`${styles.game} ${kind === entry.id ? styles.gameOn : ''}`}
                 onClick={() => handleKind(entry.id)}
                 aria-pressed={kind === entry.id}
               >
+                <BoardPreview kind={entry.id} />
                 <span className={styles.gameName}>{entry.name}</span>
                 <span className={styles.gameDetail}>{entry.detail}</span>
               </button>
             ))}
           </div>
-        </fieldset>
+        </section>
 
-        <fieldset className={styles.group}>
-          <legend className={styles.legend}>Comment jouer</legend>
-          <div className={styles.modes}>
+        <section className={styles.section}>
+          <h2 className={styles.label}>Mode</h2>
+          <div className={styles.segments} role="group">
             {modes.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
-                className={`${styles.mode} ${mode === entry.id ? styles.modeActive : ''}`}
+                className={`${styles.segment} ${mode === entry.id ? styles.segmentOn : ''}`}
                 onClick={() => setMode(entry.id)}
                 aria-pressed={mode === entry.id}
+                title={entry.detail}
               >
-                <span className={styles.modeTitle}>{entry.title}</span>
-                <span className={styles.modeDetail}>{entry.detail}</span>
+                {entry.label}
               </button>
             ))}
           </div>
-        </fieldset>
+          <p className={styles.hint}>
+            {modes.find((entry) => entry.id === mode)?.detail}
+          </p>
+        </section>
 
         {mode === 'solo' && (
-          <fieldset className={styles.group}>
-            <legend className={styles.legend}>Contre qui</legend>
-            <div className={styles.chips}>
-              {opponents.map((entry) => (
+          <section className={styles.section}>
+            <h2 className={styles.label}>Adversaire</h2>
+            <div className={styles.rail}>
+              {opponents.map((entry, index) => (
                 <button
                   key={entry.id}
                   type="button"
-                  className={`${styles.chip} ${
-                    difficulty === entry.id ? styles.chipActive : ''
-                  }`}
+                  className={`${styles.card} ${difficulty === entry.id ? styles.cardOn : ''}`}
                   onClick={() => setDifficulty(entry.id)}
                   aria-pressed={difficulty === entry.id}
                 >
-                  <span className={styles.chipName}>{entry.name}</span>
-                  <span className={styles.chipTag}>{entry.tagline}</span>
+                  {/* Le niveau se lit d'un coup d'œil, sans avoir à comparer. */}
+                  <span className={styles.pips} aria-hidden="true">
+                    {Array.from({ length: opponents.length }, (_, i) => (
+                      <span
+                        key={i}
+                        className={i <= index ? styles.pipOn : styles.pip}
+                      />
+                    ))}
+                  </span>
+                  <span className={styles.cardName}>{entry.name}</span>
+                  <span className={styles.cardTag}>{entry.tagline}</span>
                 </button>
               ))}
             </div>
-          </fieldset>
+          </section>
         )}
 
         {kind === 'dames' && mode !== 'daily' && (
-          <fieldset className={styles.group}>
-            <legend className={styles.legend}>Rythme</legend>
-            <div className={styles.chips}>
+          <section className={styles.section}>
+            <h2 className={styles.label}>Cadence</h2>
+            <div className={styles.segments} role="group">
               {TIME_OPTIONS.map((id) => (
                 <button
                   key={id}
                   type="button"
-                  className={`${styles.chip} ${
-                    timeControl === id ? styles.chipActive : ''
-                  }`}
+                  className={`${styles.segment} ${timeControl === id ? styles.segmentOn : ''}`}
                   onClick={() => setTimeControl(id)}
                   aria-pressed={timeControl === id}
                 >
-                  <span className={styles.chipName}>{TIME_CONTROLS[id].label}</span>
-                  <span className={styles.chipTag}>{TIME_CONTROLS[id].description}</span>
+                  {TIME_CONTROLS[id].label}
                 </button>
               ))}
             </div>
-          </fieldset>
+            <p className={styles.hint}>{TIME_CONTROLS[timeControl].description}</p>
+          </section>
         )}
+      </div>
 
+      {/* Le lancement reste sous le pouce, quelle que soit la longueur de l'écran. */}
+      <div className={styles.launcher}>
         <button
           type="button"
           className={styles.play}
           onClick={() => startGame({ kind, mode, difficulty, timeControl })}
         >
-          {mode === 'online'
-            ? 'Créer ou rejoindre'
-            : mode === 'daily'
-              ? 'Relever le défi'
-              : 'Commencer la partie'}
+          {cta}
+          <span className={styles.playIcon} aria-hidden="true">
+            ▸
+          </span>
         </button>
       </div>
     </div>
