@@ -209,7 +209,7 @@ const describe = (
       : 'Partie nulle : 25 coups sans prise ni promotion.';
   }
 
-  if (state.chainFrom) return 'Rafle en cours, continuez avec la même pièce !';
+  if (state.chainFrom) return 'Rafle en cours — enchaînez la prise suivante !';
 
   const mustTake = hasMandatoryCapture(state);
 
@@ -301,10 +301,30 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const validMoves = useMemo(
+  /** Le camp au trait est-il piloté par la personne devant l'écran ? */
+  const controllable =
+    mode === 'pass'
+      ? true
+      : mode === 'online'
+        ? game.currentPlayer === playerType
+        : game.currentPlayer !== AI_PLAYER;
+
+  /*
+   * Pendant une rafle, la pièce qui doit reprendre est imposée par les règles :
+   * la sélection en découle plutôt que d'être mémorisée à part. Impossible dès
+   * lors de la perdre d'un clic à côté et de devoir la re-toucher.
+   */
+  const selection = useMemo(
     () =>
-      selectedCell ? legalMovesFrom(game, selectedCell.row, selectedCell.col) : [],
-    [game, selectedCell],
+      game.chainFrom && controllable
+        ? { row: game.chainFrom.row, col: game.chainFrom.col }
+        : selectedCell,
+    [game.chainFrom, controllable, selectedCell],
+  );
+
+  const validMoves = useMemo(
+    () => (selection ? legalMovesFrom(game, selection.row, selection.col) : []),
+    [game, selection],
   );
 
   const movableCells = useMemo(() => movablePositions(game), [game]);
@@ -506,14 +526,26 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // --- Jouer un coup ------------------------------------------------------
 
   const commitMove = useCallback(
-    (move: Move, broadcast: boolean) => {
+    (move: Move, byPlayer: boolean) => {
       const current = gameRef.current;
       const next = playMove(current, move);
       if (next === current) return;
 
       gameRef.current = next;
       setGame(next);
-      setSelectedCell(null);
+
+      /*
+       * Pendant une rafle, la pièce reste sélectionnée sur sa nouvelle case :
+       * le joueur enchaîne les prises en désignant directement les cases
+       * d'arrivée, au lieu de re-toucher sa pièce avant chacune d'elles.
+       * La sélection ne suit que les coups joués à la main — celle de
+       * l'adversaire artificiel n'aurait aucun sens à l'écran.
+       */
+      setSelectedCell(
+        byPlayer && next.chainFrom
+          ? { row: next.chainFrom.row, col: next.chainFrom.col }
+          : null,
+      );
       setHint(null);
       setNotice(null);
 
@@ -525,7 +557,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         );
       }
 
-      if (broadcast && isMultiplayer) {
+      if (byPlayer && isMultiplayer) {
         socketMakeMove(move, next.currentPlayer);
       }
     },
@@ -681,7 +713,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     (row: number, col: number) => {
       if (!canPlay(game.currentPlayer)) return;
 
-      if (selectedCell) {
+      if (selection) {
         const target = validMoves.find(
           (move) => move.toRow === row && move.toCol === col,
         );
@@ -689,7 +721,15 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           commitMove(target, true);
           return;
         }
-        if (selectedCell.row === row && selectedCell.col === col) {
+
+        // En pleine rafle, aucun clic ne libère la pièce : elle doit reprendre.
+        if (game.chainFrom) {
+          play('illegal');
+          setNotice('La rafle doit se poursuivre avec la même pièce.');
+          return;
+        }
+
+        if (selection.row === row && selection.col === col) {
           setSelectedCell(null);
           return;
         }
@@ -717,7 +757,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setNotice(null);
       setSelectedCell({ row, col });
     },
-    [canPlay, commitMove, game, mustCapture, selectedCell, validMoves],
+    [canPlay, commitMove, game, mustCapture, selection, validMoves],
   );
 
   const requestHint = useCallback(() => {
@@ -755,7 +795,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       mode,
       board: game.board,
       currentPlayer: game.currentPlayer,
-      selectedCell,
+      selectedCell: selection,
       validMoves,
       whitePieces,
       blackPieces,
@@ -837,7 +877,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       retryDaily,
       roomId,
       screen,
-      selectedCell,
+      selection,
       series,
       shareDaily,
       shareResult,

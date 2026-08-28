@@ -10,6 +10,7 @@ import {
   generateMoves,
   hasMandatoryCapture,
   legalMoves,
+  legalMovesFrom,
   movablePositions,
   playMove,
   serializeBoard,
@@ -849,5 +850,71 @@ describe('dernière pièce d’un camp', () => {
       blackMoves.some((candidate) => candidate.toRow === 0),
       'la dame doit pouvoir remonter toute la colonne',
     );
+  });
+});
+
+describe('enchaînement des prises à la main', () => {
+  test('une rafle se joue en désignant seulement les cases d’arrivée', () => {
+    let state = gameFrom(
+      [
+        'w....',
+        '.....',
+        'wb.b.',
+        '....b',
+        '.....',
+      ],
+      'white',
+    );
+
+    /*
+     * On reproduit ce que fait l'interface : le joueur touche sa pièce une
+     * fois, puis ne désigne plus que des cases d'arrivée. Entre deux prises, la
+     * sélection est déduite de `chainFrom` — jamais re-saisie par le joueur.
+     */
+    let selection: { row: number; col: number } | null = { row: 2, col: 0 };
+    const clicks: ReadonlyArray<[number, number]> = [
+      [2, 2],
+      [2, 4],
+      [4, 4],
+    ];
+
+    const touches = 1; // la seule fois où le joueur touche sa pièce
+    for (const [row, col] of clicks) {
+      assert.ok(selection, 'la pièce doit rester active entre deux prises');
+
+      const options = legalMovesFrom(state, selection!.row, selection!.col);
+      const move = options.find((m) => m.toRow === row && m.toCol === col);
+      assert.ok(move, `la case (${row},${col}) doit être proposée directement`);
+
+      state = playMove(state, move!);
+      selection = state.chainFrom
+        ? { row: state.chainFrom.row, col: state.chainFrom.col }
+        : null;
+    }
+
+    assert.equal(touches, 1, 'une seule sélection pour toute la rafle');
+    assert.equal(state.chainLength, 3, 'les trois prises ont bien été jouées');
+    assert.equal(state.currentPlayer, 'black', 'le tour passe une fois la rafle finie');
+    assert.equal(selection, null, 'la pièce est relâchée à la fin de la rafle');
+  });
+
+  test('la pièce imposée est la seule à proposer des coups', () => {
+    const state = gameFrom(
+      [
+        'w....',
+        '.....',
+        'wb.b.',
+        '.....',
+        '.....',
+      ],
+      'white',
+    );
+
+    const mid = playMove(state, move(2, 0, 2, 2, [2, 1]));
+    assert.deepEqual(mid.chainFrom, { row: 2, col: 2 });
+
+    // Le pion resté en (0,0) ne peut pas voler la main pendant la rafle.
+    assert.equal(legalMovesFrom(mid, 0, 0).length, 0);
+    assert.ok(legalMovesFrom(mid, 2, 2).length > 0);
   });
 });
