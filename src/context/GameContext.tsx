@@ -58,6 +58,15 @@ import {
   type DailyPuzzle,
 } from '@/lib/daily';
 import type { MorpionVariant } from '@/lib/morpion';
+import {
+  addEntry,
+  clearHistory as clearStoredHistory,
+  loadHistory,
+  makeEntryId,
+  saveHistory,
+  type GameResult,
+  type HistoryEntry,
+} from '@/lib/history';
 import { useSocketContext, type NetworkMove } from './SocketContext';
 import type { Socket } from 'socket.io-client';
 
@@ -136,6 +145,9 @@ interface GameContextType {
   roomId: string | null;
   playerType: Player | null;
   opponent: string | null;
+  /** Nom de l'adversaire qui vient de quitter la partie, s'il y en a un. */
+  opponentLeft: string | null;
+  acknowledgeOpponentLeft: () => void;
   isWaitingForOpponent: boolean;
   isGameStarted: boolean;
   /** Accès direct au canal, pour les jeux qui gèrent eux-mêmes leurs échanges. */
@@ -147,6 +159,11 @@ interface GameContextType {
   connectionError: string | null;
   bestChain: number;
   series: { white: number; black: number };
+  /** Parties conservées sur l'appareil, de la plus récente à la plus ancienne. */
+  history: HistoryEntry[];
+  clearHistory: () => void;
+  /** Consigne une partie terminée : le morpion tient son propre état. */
+  recordGame: (entry: Omit<HistoryEntry, 'id'>) => void;
   shareResult: () => void;
   /** Code de salle reçu par lien d'invitation, à proposer au joueur. */
   invitedRoom: string | null;
@@ -250,6 +267,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     roomGame,
     playerType,
     opponent,
+    opponentLeft,
+    acknowledgeOpponentLeft,
     isGameStarted,
     makeMove: socketMakeMove,
     notifyGameOver,
@@ -280,6 +299,26 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [bestChain, setBestChain] = useState(0);
   /** Score cumulé des revanches, remis à zéro en quittant la table. */
   const [series, setSeries] = useState({ white: 0, black: 0 });
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  useEffect(() => {
+    setHistory(loadHistory());
+  }, []);
+
+  /** Consigne une partie terminée, quel que soit le jeu. */
+  const recordGame = useCallback(
+    (entry: Omit<HistoryEntry, 'id'>) => {
+      setHistory((current) => {
+        const next = addEntry(current, {
+          ...entry,
+          id: makeEntryId(entry.playedAt, entry.game),
+        });
+        saveHistory(next);
+        return next;
+      });
+    },
+    [],
+  );
 
   const gameRef = useRef(game);
   gameRef.current = game;
@@ -489,14 +528,45 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (game.chainLength > bestChain) setBestChain(game.chainLength);
   }, [game.chainLength, bestChain]);
 
-  // Le score de la série ne bouge qu'une fois par partie.
+  // Le score de la série et l'historique ne bougent qu'une fois par partie.
   const countedGame = useRef(0);
   useEffect(() => {
-    if (!gameOver || !winner || mode === 'daily') return;
+    if (!gameOver || mode === 'daily') return;
     if (countedGame.current === gameId) return;
     countedGame.current = gameId;
-    setSeries((current) => ({ ...current, [winner]: current[winner] + 1 }));
-  }, [gameOver, winner, gameId, mode]);
+
+    if (winner) {
+      setSeries((current) => ({ ...current, [winner]: current[winner] + 1 }));
+    }
+
+    // En duel local, personne n'est « le joueur » : on note le camp vainqueur.
+    const mine: Player = mode === 'online' ? (playerType ?? 'white') : 'white';
+    const result: GameResult = !winner ? 'draw' : winner === mine ? 'win' : 'loss';
+
+    recordGame({
+      game: 'dames',
+      mode,
+      result,
+      opponent:
+        mode === 'solo'
+          ? difficulty
+          : mode === 'online'
+            ? (opponent ?? 'Adversaire')
+            : 'Duel local',
+      playedAt: Date.now(),
+      detail: bestChain >= 2 ? `rafle de ${bestChain}` : undefined,
+    });
+  }, [
+    gameOver,
+    winner,
+    gameId,
+    mode,
+    playerType,
+    difficulty,
+    opponent,
+    bestChain,
+    recordGame,
+  ]);
 
   const shareResult = useCallback(() => {
     const names =
@@ -845,6 +915,8 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       roomId,
       playerType,
       opponent,
+      opponentLeft,
+      acknowledgeOpponentLeft,
       isWaitingForOpponent,
       isGameStarted,
       socket,
@@ -853,6 +925,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       connectionError: socketError,
       bestChain,
       series,
+      history,
+      clearHistory: () => {
+        clearStoredHistory();
+        setHistory([]);
+      },
+      recordGame,
       shareResult,
       invitedRoom,
       daily,
@@ -900,13 +978,17 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       movableCells,
       muted,
       mustCapture,
+      acknowledgeOpponentLeft,
       opponent,
+      opponentLeft,
       playerType,
       requestHint,
       resetGame,
       retryDaily,
       roomId,
       screen,
+      history,
+      recordGame,
       selection,
       series,
       shareDaily,

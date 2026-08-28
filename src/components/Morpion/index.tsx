@@ -54,6 +54,9 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
     isWaitingForOpponent,
     isGameStarted,
     makeMove: sendMove,
+    recordGame,
+    opponentLeft,
+    acknowledgeOpponentLeft,
   } = useGameContext();
 
   const online = mode === 'online';
@@ -168,13 +171,31 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
   // Le score de la série ne bouge qu'une fois par partie.
   const counted = useRef<MorpionState | null>(null);
   useEffect(() => {
-    if (state.status.kind !== 'win' || counted.current === state) return;
+    if (state.status.kind === 'playing' || counted.current === state) return;
     counted.current = state;
 
-    const { winner } = state.status;
-    setSeries((current) => ({ ...current, [winner]: current[winner] + 1 }));
-    play(mode === 'pass' || winner === (online ? myMark : HUMAN) ? 'win' : 'lose');
-  }, [state, mode, online, myMark]);
+    const mine = online ? myMark : HUMAN;
+    const winner = state.status.kind === 'win' ? state.status.winner : null;
+
+    if (winner) {
+      setSeries((current) => ({ ...current, [winner]: current[winner] + 1 }));
+    }
+    play(mode === 'pass' || (winner !== null && winner === mine) ? 'win' : 'lose');
+
+    recordGame({
+      game: 'morpion',
+      mode,
+      result: !winner ? 'draw' : winner === mine ? 'win' : 'loss',
+      opponent:
+        mode === 'solo'
+          ? (character?.name ?? 'Ordinateur')
+          : mode === 'online'
+            ? (opponent ?? 'Adversaire')
+            : 'Duel local',
+      playedAt: Date.now(),
+      detail: variant === 'moving-heart' ? 'cœur mouvant' : undefined,
+    });
+  }, [state, mode, online, myMark, recordGame, character, opponent, variant]);
 
   // En ligne, c'est le démarrage annoncé par le serveur qui ouvre le jeu — pas
   // le nom de l'adversaire, que seul l'hôte reçoit et qui bloquait l'invité.
@@ -387,7 +408,34 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
         />
       </main>
 
-      {online && (!roomId || isWaitingForOpponent) && (
+      {opponentLeft && (
+        <Modal
+          variant="center"
+          title="Adversaire parti"
+          onClose={acknowledgeOpponentLeft}
+        >
+          <div className={styles.result}>
+            <p className={styles.resultText}>
+              {opponentLeft} a quitté la partie. Vous pouvez l’attendre, ou
+              revenir à l’accueil.
+            </p>
+            <div className={styles.actions}>
+              <button type="button" className={styles.primary} onClick={goHome}>
+                Accueil
+              </button>
+              <button
+                type="button"
+                className={styles.secondary}
+                onClick={acknowledgeOpponentLeft}
+              >
+                Attendre
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {online && !opponentLeft && (!roomId || isWaitingForOpponent) && (
         <Modal title="Jouer à distance" dismissible={false} onClose={goHome}>
           <MultiplayerMenu />
         </Modal>

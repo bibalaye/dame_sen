@@ -390,3 +390,56 @@
     transition: none;
   }
 }
+
+/* Palmarès : un rappel discret qui ouvre l'historique complet. */
+.record {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 9px 14px;
+  border: 1px solid rgba(242, 232, 214, 0.14);
+  border-radius: 50px;
+  background: rgba(255, 255, 255, 0.035);
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: border-color 0.18s ease;
+}
+
+.record:hover {
+  border-color: rgba(201, 146, 46, 0.5);
+}
+
+.record:focus-visible {
+  outline: 3px solid #f0d9a4;
+  outline-offset: 3px;
+}
+
+.recordFigure {
+  font-size: 1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--brass);
+}
+
+.recordLabel {
+  font-size: 0.78rem;
+  color: rgba(242, 232, 214, 0.6);
+}
+
+.recordStreak {
+  padding: 2px 8px;
+  border-radius: 50px;
+  background: rgba(201, 146, 46, 0.2);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--brass);
+}
+
+.recordMore {
+  color: rgba(242, 232, 214, 0.4);
+  font-size: 1.1rem;
+  line-height: 1;
+}

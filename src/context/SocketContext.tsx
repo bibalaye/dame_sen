@@ -78,6 +78,9 @@ interface SocketContextType {
   roomGame: RoomGame | null;
   playerType: Player | null;
   opponent: string | null;
+  /** Nom de l'adversaire qui vient de partir, tant que le joueur n'a pas vu. */
+  opponentLeft: string | null;
+  acknowledgeOpponentLeft: () => void;
   isMultiplayer: boolean;
   isRoomCreator: boolean;
   isGameStarted: boolean;
@@ -113,6 +116,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const playerTypeRef = useRef<Player | null>(null);
   const [playerType, setPlayer] = useState<Player | null>(null);
   const [opponent, setOpponent] = useState<string | null>(null);
+  const [opponentLeft, setOpponentLeft] = useState<string | null>(null);
+  /** Le nom survit au départ : sans lui, on ne saurait plus qui a quitté. */
+  const opponentRef = useRef<string | null>(null);
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [isRoomCreator, setIsRoomCreator] = useState(false);
   const [isGameStarted, setIsGameStarted] = useState(false);
@@ -197,6 +203,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     // Opponent joined the room
     socket.on('opponent-joined', (data) => {
       setOpponent(data.username);
+      opponentRef.current = data.username;
+      setOpponentLeft(null);
       console.log(`Opponent joined: ${data.username}`);
     });
 
@@ -210,7 +218,11 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         (entry: { player: Player; username: string }) =>
           entry.player !== playerTypeRef.current,
       );
-      if (others[0]?.username) setOpponent(others[0].username);
+      if (others[0]?.username) {
+        setOpponent(others[0].username);
+        opponentRef.current = others[0].username;
+      }
+      setOpponentLeft(null);
 
       setIsGameStarted(true);
     });
@@ -233,10 +245,13 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     });
 
     // Opponent disconnected
+    // Un départ doit se voir : sans cela, le joueur attend un coup qui ne
+    // viendra jamais, sans comprendre pourquoi.
     socket.on('opponent-disconnected', () => {
+      setOpponentLeft(opponentRef.current ?? 'Votre adversaire');
       setOpponent(null);
+      opponentRef.current = null;
       setIsGameStarted(false);
-      console.log('Opponent disconnected');
     });
 
     // Clean up listeners on unmount
@@ -318,6 +333,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       setPlayer(null);
       playerTypeRef.current = null;
       setOpponent(null);
+      opponentRef.current = null;
+      setOpponentLeft(null);
       setIsRoomCreator(false);
       setIsGameStarted(false);
     }
@@ -332,6 +349,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         roomGame,
         playerType,
         opponent,
+        opponentLeft,
+        acknowledgeOpponentLeft: () => setOpponentLeft(null),
         isMultiplayer,
         isRoomCreator,
         isGameStarted,

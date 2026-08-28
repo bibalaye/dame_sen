@@ -154,3 +154,22 @@
     padding-bottom: 24px;
   }
 }
+
+/* Départ de l'adversaire : on explique, et on laisse le choix. */
+.leftPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: center;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.leftActions {
+  display: flex;
+  gap: 8px;
+}
+
+.leftActions .btn {
+  flex: 1;
+}

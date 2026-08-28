@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import StatsPanel from '../StatsPanel';
+import { computeStats } from '@/lib/history';
 import { useGameContext, type GameKind, type GameMode } from '@/context/GameContext';
 import { TIME_CONTROLS, type TimeControl } from '@/lib/clock';
 import { MORPION_OPPONENTS, type MorpionVariant } from '@/lib/morpion';
@@ -99,7 +101,9 @@ const BoardPreview: React.FC<{ kind: GameKind }> = ({ kind }) => {
 };
 
 const HomeScreen: React.FC = () => {
-  const { startGame } = useGameContext();
+  const { startGame, history } = useGameContext();
+  const [statsOpen, setStatsOpen] = useState(false);
+  const stats = useMemo(() => computeStats(history), [history]);
   const [kind, setKind] = useState<GameKind>('dames');
   const [mode, setMode] = useState<GameMode>('solo');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
@@ -138,6 +142,28 @@ const HomeScreen: React.FC = () => {
             Jeux de plateau
             <span className={styles.titleAccent}>du Sénégal</span>
           </h1>
+
+          {stats.played > 0 && (
+            <button
+              type="button"
+              className={styles.record}
+              onClick={() => setStatsOpen(true)}
+            >
+              <span className={styles.recordFigure}>{stats.played}</span>
+              <span className={styles.recordLabel}>
+                partie{stats.played > 1 ? 's' : ''} ·{' '}
+                {Math.round(stats.winRate * 100)}% gagnées
+              </span>
+              {stats.currentStreak > 1 && (
+                <span className={styles.recordStreak}>
+                  série de {stats.currentStreak}
+                </span>
+              )}
+              <span className={styles.recordMore} aria-hidden="true">
+                ›
+              </span>
+            </button>
+          )}
         </header>
 
         <section className={styles.section}>
@@ -253,6 +279,8 @@ const HomeScreen: React.FC = () => {
           </section>
         )}
       </div>
+
+      {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
 
       {/* Le lancement reste sous le pouce, quelle que soit la longueur de l'écran. */}
       <div className={styles.launcher}>

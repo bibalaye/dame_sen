@@ -36,6 +36,8 @@ const GameBoard = () => {
     roomId,
     opponent,
     isWaitingForOpponent,
+    opponentLeft,
+    acknowledgeOpponentLeft,
     daily,
     series,
     bestChain,
@@ -206,7 +208,38 @@ const GameBoard = () => {
 
       {sheet === 'rules' && <RulesPanel onClose={() => setSheet(null)} />}
 
-      {showRoom && (
+      {opponentLeft && (
+        <Modal
+          variant="center"
+          title="Adversaire parti"
+          onClose={acknowledgeOpponentLeft}
+        >
+          <div className={styles.leftPanel}>
+            <p>
+              {opponentLeft} a quitté la partie. Vous pouvez l’attendre, ou
+              revenir à l’accueil.
+            </p>
+            <div className={styles.leftActions}>
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.resetBtn}`}
+                onClick={goHome}
+              >
+                Accueil
+              </button>
+              <button
+                type="button"
+                className={styles.btn}
+                onClick={acknowledgeOpponentLeft}
+              >
+                Attendre
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showRoom && !opponentLeft && (
         <Modal
           title="Jouer à distance"
           dismissible={!roomPending}
