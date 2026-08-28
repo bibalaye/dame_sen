@@ -39,6 +39,13 @@ interface ProfileRow {
   board_theme: string;
   frame: string | null;
   title: string | null;
+  /**
+   * Noms d'avant la boutique. Le code se déploie avant que le schéma ne soit
+   * rejoué : entre les deux, le serveur renvoie encore ceux-ci, et les ignorer
+   * afficherait un solde vide à un joueur qui a bel et bien des cauris.
+   */
+  stars?: number;
+  unlocked?: string[] | null;
   last_visit_day: number;
   visit_streak: number;
   daily_last_number: number;
@@ -99,19 +106,22 @@ const rowsToHistory = (rows: readonly GameRow[]): HistoryEntry[] =>
 
 const rowToProfile = (row: ProfileRow, games: readonly GameRow[]): PlayerProfile => ({
   wallet: {
-    coins: row.coins,
-    earned: row.earned,
+    // `?? row.stars` couvre le serveur pas encore migré ; `Number(...) || 0`
+    // couvre le reste, car une colonne absente vaut `undefined` et rendrait
+    // tout affichage de somme impossible.
+    coins: Number(row.coins ?? row.stars) || 0,
+    earned: Number(row.earned) || 0,
     // Un article retiré du catalogue entre deux versions ne doit pas empêcher
     // le profil de se charger.
-    owned: keepKnownItems(row.owned ?? []),
-    lastVisitDay: row.last_visit_day,
-    visitStreak: row.visit_streak,
+    owned: keepKnownItems(row.owned ?? row.unlocked ?? []),
+    lastVisitDay: Number(row.last_visit_day) || 0,
+    visitStreak: Number(row.visit_streak) || 0,
   },
   history: rowsToHistory(games),
   daily: {
-    lastNumber: row.daily_last_number,
-    streak: row.daily_streak,
-    solvedCount: row.daily_solved_count,
+    lastNumber: Number(row.daily_last_number) || 0,
+    streak: Number(row.daily_streak) || 0,
+    solvedCount: Number(row.daily_solved_count) || 0,
   },
   loadout: {
     pieces: asPieceSet(row.piece_set),
@@ -270,10 +280,14 @@ export interface RewardOutcome {
 }
 
 const asRewardOutcome = (payload: unknown, fallbackCoins: number): RewardOutcome => {
-  const data = (payload ?? {}) as { rewards?: unknown; coins?: unknown };
+  const data = (payload ?? {}) as { rewards?: unknown; coins?: unknown; stars?: unknown };
+  // `stars` est le nom d'avant la boutique : un serveur pas encore rejoué le
+  // renvoie encore, et l'ignorer figerait le solde affiché.
+  const montant = data.coins ?? data.stars;
+
   return {
     rewards: Array.isArray(data.rewards) ? (data.rewards as RewardReason[]) : [],
-    coins: typeof data.coins === 'number' ? data.coins : fallbackCoins,
+    coins: typeof montant === 'number' ? montant : fallbackCoins,
   };
 };
 

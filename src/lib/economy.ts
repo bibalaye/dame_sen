@@ -184,6 +184,13 @@ export const saveWallet = (wallet: Wallet): void => {
   }
 };
 
-/** Écriture des sommes : « 1 250 » se lit mieux que « 1250 ». */
+/**
+ * Écriture des sommes : « 1 250 » se lit mieux que « 1250 ».
+ *
+ * Une somme absente s'écrit « 0 » plutôt que de faire tomber l'écran. Le cas
+ * s'est produit : le serveur n'avait pas encore la colonne `coins`, le solde
+ * arrivait indéfini, et l'accueil entier refusait de s'afficher. Le solde d'un
+ * joueur n'est jamais un bon endroit pour lever.
+ */
 export const formatCoins = (amount: number): string =>
-  amount.toLocaleString('fr-FR').replace(/ | /g, ' ');
+  (Number.isFinite(amount) ? amount : 0).toLocaleString('fr-FR').replace(/ | /g, ' ');

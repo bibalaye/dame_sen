@@ -194,6 +194,16 @@ describe('écriture des sommes', () => {
     assert.equal(formatCoins(35), '35');
     assert.equal(formatCoins(0), '0');
   });
+
+  test('une somme absente s’écrit zéro au lieu de tout faire tomber', () => {
+    // Cas réel : le serveur n'a pas encore la colonne `coins` parce que le
+    // schéma n'a pas été rejoué. L'affichage d'un solde n'est jamais un bon
+    // endroit pour lever.
+    assert.equal(formatCoins(undefined as unknown as number), '0');
+    assert.equal(formatCoins(null as unknown as number), '0');
+    assert.equal(formatCoins(NaN), '0');
+    assert.equal(formatCoins(Infinity), '0');
+  });
 });
 
 describe('robustesse', () => {
