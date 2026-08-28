@@ -247,3 +247,71 @@ describe('robustesse', () => {
     }
   });
 });
+
+describe('fins de partie', () => {
+  test('une pièce contre une : la partie est nulle', () => {
+    // Les blancs prennent l'avant-dernier noir : il reste un pion de chaque côté.
+    const state = gameWith(['.....', '.....', '.bw..', '.....', 'b....'], 'white');
+    const next = playMove(state, {
+      fromRow: 2,
+      fromCol: 2,
+      toRow: 2,
+      toCol: 0,
+      captureRow: 2,
+      captureCol: 1,
+    });
+
+    assert.equal(next.status.kind, 'draw');
+    if (next.status.kind === 'draw') {
+      assert.equal(next.status.reason, 'lone-pieces');
+    }
+  });
+
+  test('deux pièces contre une laissent la partie ouverte', () => {
+    const state = gameWith(['.....', '.....', '.bw..', '.....', 'bw...'], 'white');
+    const next = playMove(state, {
+      fromRow: 2,
+      fromCol: 2,
+      toRow: 2,
+      toCol: 0,
+      captureRow: 2,
+      captureCol: 1,
+    });
+
+    assert.equal(next.status.kind, 'playing');
+  });
+
+  test('la victoire par capture prime sur la nulle', () => {
+    // Le dernier noir est pris : c'est une victoire, pas une égalité.
+    const state = gameWith(['.....', '.....', '.bw..', '.....', '.....'], 'white');
+    const next = playMove(state, {
+      fromRow: 2,
+      fromCol: 2,
+      toRow: 2,
+      toCol: 0,
+      captureRow: 2,
+      captureCol: 1,
+    });
+
+    assert.equal(next.status.kind, 'win');
+    if (next.status.kind === 'win') {
+      assert.equal(next.status.winner, 'white');
+      assert.equal(next.status.reason, 'capture');
+    }
+  });
+
+  test('plus aucun coup n’est légal une fois la nulle prononcée', () => {
+    const state = gameWith(['.....', '.....', '.bw..', '.....', 'b....'], 'white');
+    const drawn = playMove(state, {
+      fromRow: 2,
+      fromCol: 2,
+      toRow: 2,
+      toCol: 0,
+      captureRow: 2,
+      captureCol: 1,
+    });
+
+    assert.equal(legalMoves(drawn).length, 0);
+    assert.equal(playMove(drawn, { fromRow: 2, fromCol: 0, toRow: 3, toCol: 0 }), drawn);
+  });
+});

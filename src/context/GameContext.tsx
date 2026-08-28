@@ -240,21 +240,27 @@ const describe = (
   mode: GameMode,
   playerType: Player | null,
   isThinking: boolean,
-  timeoutLoser: Player | null,
 ): string => {
-  if (timeoutLoser) {
-    return `Temps écoulé — le joueur ${sideName(opponentOf(timeoutLoser))} gagne !`;
-  }
   if (state.status.kind === 'win') {
     const side = sideName(state.status.winner);
-    return state.status.reason === 'block'
-      ? `Le joueur ${side} gagne par blocage !`
-      : `Le joueur ${side} gagne !`;
+    switch (state.status.reason) {
+      case 'timeout':
+        return `Temps écoulé — le joueur ${side} gagne !`;
+      case 'block':
+        return `Le joueur ${side} gagne par blocage !`;
+      default:
+        return `Le joueur ${side} gagne !`;
+    }
   }
   if (state.status.kind === 'draw') {
-    return state.status.reason === 'repetition'
-      ? 'Partie nulle : position répétée trois fois.'
-      : 'Partie nulle : 25 coups sans prise ni promotion.';
+    switch (state.status.reason) {
+      case 'repetition':
+        return 'Partie nulle : position répétée trois fois.';
+      case 'lone-pieces':
+        return 'Partie nulle : une pièce chacun, personne ne peut plus forcer.';
+      default:
+        return 'Partie nulle : 25 coups sans prise ni promotion.';
+    }
   }
 
   if (state.chainFrom) return 'Rafle en cours — enchaînez la prise suivante !';
@@ -316,7 +322,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [hintsLeft, setHintsLeft] = useState(MAX_HINTS);
   const [notice, setNotice] = useState<string | null>(null);
   const [clock, setClock] = useState<ClockState>(() => createClock('none', 0));
-  const [timeoutLoser, setTimeoutLoser] = useState<Player | null>(null);
   const [muted, setMutedState] = useState(false);
   const [pieceSetId, setPieceSetId] = useState<PieceSetId>(DEFAULT_PIECE_SET);
   const [daily, setDaily] = useState<DailyState | null>(null);
@@ -423,14 +428,14 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const whitePieces = useMemo(() => countPieces(game.board, 'white'), [game.board]);
   const blackPieces = useMemo(() => countPieces(game.board, 'black'), [game.board]);
 
-  const gameOver = game.status.kind !== 'playing' || timeoutLoser !== null;
-  const winner = timeoutLoser ? opponentOf(timeoutLoser) : winnerOf(game.status);
+  const gameOver = game.status.kind !== 'playing';
+  const winner = winnerOf(game.status);
 
   const message =
     notice ??
     (mode === 'daily' && daily
       ? describeDaily(game, daily)
-      : describe(game, mode, playerType, isThinking, timeoutLoser));
+      : describe(game, mode, playerType, isThinking));
 
   const alert =
     notice ??
@@ -495,7 +500,6 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setHint(null);
     setHintsLeft(MAX_HINTS);
     setNotice(null);
-    setTimeoutLoser(null);
     setBestChain(0);
     reportedWinner.current = null;
 
@@ -635,12 +639,25 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => window.clearInterval(timer);
   }, [clock.control, clock.running, gameOver]);
 
+  /*
+   * Le drapeau écrit directement dans l'état de la partie.
+   *
+   * Il existait auparavant un second indicateur de fin, tenu à part : deux
+   * sources de vérité pour « la partie est finie », que chaque écran devait
+   * penser à consulter toutes les deux. Une seule subsiste.
+   */
   useEffect(() => {
     const flagged = flaggedPlayer(clock);
-    if (flagged && !timeoutLoser && game.status.kind === 'playing') {
-      setTimeoutLoser(flagged);
-    }
-  }, [clock, timeoutLoser, game.status.kind]);
+    if (!flagged) return;
+    if (gameRef.current.status.kind !== 'playing') return;
+
+    const frozen: GameState = {
+      ...gameRef.current,
+      status: { kind: 'win', winner: opponentOf(flagged), reason: 'timeout' },
+    };
+    gameRef.current = frozen;
+    setGame(frozen);
+  }, [clock]);
 
   // Arrête la pendule dès que la partie est terminée.
   useEffect(() => {

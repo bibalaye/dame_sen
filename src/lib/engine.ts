@@ -24,6 +24,7 @@
  *  - Un pion qui atteint la dernière rangée adverse devient dame. S'il était en
  *    pleine rafle, il la poursuit avec sa nouvelle portée.
  *  - Réduit à une seule pièce, un camp la reçoit en dame d'office.
+ *  - Une pièce contre une : la partie est nulle, plus personne ne peut forcer.
  */
 
 export const BOARD_SIZE = 5;
@@ -58,8 +59,16 @@ export interface Move {
 
 export type Status =
   | { readonly kind: 'playing' }
-  | { readonly kind: 'win'; readonly winner: Player; readonly reason: 'capture' | 'block' }
-  | { readonly kind: 'draw'; readonly reason: 'no-progress' | 'repetition' };
+  | {
+      readonly kind: 'win';
+      readonly winner: Player;
+      /** `timeout` vient de la pendule : le moteur ne l'établit jamais seul. */
+      readonly reason: 'capture' | 'block' | 'timeout';
+    }
+  | {
+      readonly kind: 'draw';
+      readonly reason: 'no-progress' | 'repetition' | 'lone-pieces';
+    };
 
 /** Les trois dispositions de départ étudiées. */
 export type Variant = 'classic' | 'open-center' | 'free-drop';
@@ -532,6 +541,17 @@ export const evaluateStatus = (
   }
   if (generateMoves(board, playerToMove, rules).length === 0) {
     return { kind: 'win', winner: opponentOf(playerToMove), reason: 'block' };
+  }
+  /*
+   * Une pièce contre une, sur cinq cases de côté : aucun des deux camps ne peut
+   * plus forcer la prise, chacun n'ayant qu'à fuir. Prolonger reviendrait à
+   * attendre les vingt-cinq coups de la règle d'inaction pour le même résultat.
+   */
+  if (
+    countPieces(board, 'white') === 1 &&
+    countPieces(board, 'black') === 1
+  ) {
+    return { kind: 'draw', reason: 'lone-pieces' };
   }
   if (halfmoveClock >= NO_PROGRESS_LIMIT * 2) {
     return { kind: 'draw', reason: 'no-progress' };

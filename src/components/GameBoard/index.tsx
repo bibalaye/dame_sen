@@ -267,6 +267,7 @@ const GameBoard = () => {
         <GameOverAnimation
           winner={winner}
           isDraw={status.kind === 'draw'}
+          reason={status.kind === 'playing' ? null : status.reason}
           isVisible={gameOver && !resultHidden}
           mode={mode}
           series={series}

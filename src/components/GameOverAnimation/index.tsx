@@ -9,6 +9,8 @@ import styles from './GameOverAnimation.module.css';
 interface GameOverAnimationProps {
   winner: Player | null;
   isDraw: boolean;
+  /** Ce qui a mis fin à la partie, pour l'expliquer au joueur. */
+  reason: string | null;
   isVisible: boolean;
   mode: GameMode;
   /** Score cumulé des revanches de la série en cours. */
@@ -24,6 +26,7 @@ interface GameOverAnimationProps {
 const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
   winner,
   isDraw,
+  reason,
   isVisible,
   mode,
   series,
@@ -58,12 +61,20 @@ const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
         : 'Partie perdue';
 
   const detail = isDraw
-    ? 'Personne ne prend l’avantage : la partie s’arrête.'
+    ? reason === 'lone-pieces'
+      ? 'Une pièce chacun : plus personne ne peut forcer la décision.'
+      : reason === 'repetition'
+        ? 'La même position est revenue trois fois.'
+        : 'Vingt-cinq coups sans prise ni promotion.'
     : mode === 'pass'
       ? 'Passez l’appareil pour la revanche.'
-      : winner === 'white'
-        ? 'Bien joué.'
-        : 'Votre adversaire l’emporte cette fois.';
+      : reason === 'timeout'
+        ? winner === 'white'
+          ? 'Votre adversaire a épuisé son temps.'
+          : 'Votre temps est écoulé.'
+        : winner === 'white'
+          ? 'Bien joué.'
+          : 'Votre adversaire l’emporte cette fois.';
 
   return (
     <div className={styles.gameOverContainer} role="alertdialog" aria-modal="true">
