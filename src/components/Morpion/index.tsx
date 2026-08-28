@@ -9,12 +9,15 @@ import { createClock } from '@/lib/clock';
 import { play, vibrate } from '@/lib/sound';
 import {
   MORPION_OPPONENTS,
+  PIECES_PER_PLAYER,
+  availableMoves,
   createMorpion,
   findBestMorpionMove,
   morpionThinkingDelay,
   playMorpion,
   type Mark,
   type MorpionDifficulty,
+  type MorpionMove,
   type MorpionState,
 } from '@/lib/morpion';
 import styles from './Morpion.module.css';
@@ -32,6 +35,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
   const { goHome, muted, toggleMute } = useGameContext();
 
   const [state, setState] = useState<MorpionState>(() => createMorpion());
+  const [selected, setSelected] = useState<number | null>(null);
   const [series, setSeries] = useState({ X: 0, O: 0 });
   const [menuOpen, setMenuOpen] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
@@ -42,19 +46,23 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
   const character = MORPION_OPPONENTS.find((entry) => entry.id === difficulty);
   const finished = state.status.kind !== 'playing';
   const winningLine = state.status.kind === 'win' ? state.status.line : null;
+  const isMoving = state.phase === 'movement';
 
   const reset = useCallback(() => {
     const fresh = createMorpion();
     stateRef.current = fresh;
     setState(fresh);
+    setSelected(null);
     setIsThinking(false);
   }, []);
 
-  const commit = useCallback((index: number) => {
-    const next = playMorpion(stateRef.current, index);
+  const commit = useCallback((move: MorpionMove) => {
+    const next = playMorpion(stateRef.current, move);
     if (next === stateRef.current) return;
+
     stateRef.current = next;
     setState(next);
+    setSelected(null);
     play('move');
     vibrate(10);
   }, []);
@@ -68,7 +76,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
     const timer = setTimeout(() => {
       const move = findBestMorpionMove(stateRef.current, difficulty);
       setIsThinking(false);
-      if (move !== null) commit(move);
+      if (move) commit(move);
     }, morpionThinkingDelay());
 
     return () => {
@@ -88,10 +96,47 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
     play(mode === 'pass' || winner === HUMAN ? 'win' : 'lose');
   }, [state, mode]);
 
+  const canAct = !finished && (mode === 'pass' || state.current === HUMAN);
+  const moves = canAct ? availableMoves(state) : [];
+
+  /** Cases où le pion sélectionné peut se rendre : toutes les cases libres. */
+  const destinations = new Set(
+    moves
+      .filter((move) => move.type === 'move' && move.from === selected)
+      .map((move) => move.to),
+  );
+
+  /** Pions que le joueur peut prendre en main. */
+  const movable = new Set(
+    moves.filter((move) => move.type === 'move').map((move) => move.from),
+  );
+
   const handleCell = (index: number) => {
-    if (finished || state.grid[index]) return;
-    if (mode === 'solo' && state.current !== HUMAN) return;
-    commit(index);
+    if (!canAct) return;
+
+    if (state.phase === 'placement') {
+      commit({ type: 'place', to: index });
+      return;
+    }
+
+    // Phase 2 : on prend d'abord un pion, puis on désigne sa destination.
+    if (selected !== null && destinations.has(index)) {
+      commit({ type: 'move', from: selected, to: index });
+      return;
+    }
+    if (selected === index) {
+      setSelected(null);
+      return;
+    }
+    if (movable.has(index)) {
+      setSelected(index);
+      return;
+    }
+    if (state.grid[index] === state.current) {
+      // Un pion à soi, mais bloqué : on le dit plutôt que d'ignorer le geste.
+      play('illegal');
+      setSelected(null);
+    }
   };
 
   const names =
@@ -99,11 +144,19 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
       ? { X: 'Vous', O: character?.name ?? 'Ordinateur' }
       : { X: 'Croix', O: 'Ronds' };
 
-  const alert = !finished && state.lastMove === null ? 'Alignez trois marques' : '';
+  const placedTotal = state.placed.X + state.placed.O;
+  const alert = !finished
+    ? state.phase === 'placement'
+      ? placedTotal === 0
+        ? 'Posez vos trois pions'
+        : ''
+      : placedTotal === PIECES_PER_PLAYER * 2 && state.lastMove?.type === 'place'
+        ? 'Pions en place — déplacez-en un où vous voulez'
+        : ''
+    : '';
 
   // Le morpion se joue sans pendule : on en fournit une désactivée.
   const clock = createClock('none', 0);
-  const marksLeft = (mark: Mark) => 5 - state.grid.filter((cell) => cell === mark).length;
 
   const heading =
     state.status.kind === 'draw'
@@ -118,9 +171,9 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
 
   const detail =
     state.status.kind === 'draw'
-      ? difficulty === 'hard' && mode === 'solo'
-        ? 'Le nul est le meilleur résultat possible contre lui.'
-        : 'Personne ne prend l’avantage.'
+      ? state.status.reason === 'repetition'
+        ? 'La même position est revenue trois fois.'
+        : 'Cinquante déplacements sans alignement : la partie s’arrête.'
       : state.status.kind === 'win'
         ? mode === 'pass'
           ? 'Passez l’appareil pour la revanche.'
@@ -158,8 +211,8 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
           side="black"
           name={names.O}
           subtitle={mode === 'solo' ? character?.tagline : 'les ronds'}
-          pieces={marksLeft('O')}
-          total={5}
+          pieces={PIECES_PER_PLAYER - state.placed.O}
+          total={PIECES_PER_PLAYER}
           isActive={state.current === 'O' && !finished}
           isThinking={isThinking}
           clock={clock}
@@ -168,38 +221,60 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty }) => {
         <div className={styles.stage}>
           <Toast message={alert} mute={finished} />
 
+          {/* La bascule de phase est annoncée : le jeu change de rythme. */}
+          <span className={`${styles.phase} ${isMoving ? styles.phaseMove : ''}`}>
+            {isMoving ? 'Phase 2 · déplacement' : 'Phase 1 · placement'}
+          </span>
+
           <div className={styles.grid} role="grid" aria-label="Grille de morpion">
-            {state.grid.map((cell, index) => (
-              <button
-                key={index}
-                type="button"
-                className={[
-                  styles.cell,
-                  cell === 'X' ? styles.cross : '',
-                  cell === 'O' ? styles.round : '',
-                  winningLine?.includes(index) ? styles.winning : '',
-                  state.lastMove === index ? styles.last : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                onClick={() => handleCell(index)}
-                disabled={finished || cell !== null}
-                aria-label={`Case ${index + 1}, ${
-                  cell === 'X' ? 'croix' : cell === 'O' ? 'rond' : 'libre'
-                }`}
-              >
-                <span className={styles.mark} aria-hidden="true" />
-              </button>
-            ))}
+            {state.grid.map((cell, index) => {
+              const isDestination = destinations.has(index);
+              const isPlaceable = state.phase === 'placement' && cell === null && canAct;
+
+              return (
+                <button
+                  key={index}
+                  type="button"
+                  className={[
+                    styles.cell,
+                    cell === 'X' ? styles.cross : '',
+                    cell === 'O' ? styles.round : '',
+                    winningLine?.includes(index) ? styles.winning : '',
+                    selected === index ? styles.selected : '',
+                    isDestination ? styles.destination : '',
+                    isPlaceable ? styles.placeable : '',
+                    canAct && movable.has(index) && selected === null
+                      ? styles.grabbable
+                      : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  onClick={() => handleCell(index)}
+                  disabled={finished}
+                  aria-label={`Case ${index + 1}, ${
+                    cell === 'X' ? 'croix' : cell === 'O' ? 'rond' : 'libre'
+                  }${isDestination ? ', destination possible' : ''}`}
+                  aria-pressed={selected === index}
+                >
+                  <span className={styles.mark} aria-hidden="true" />
+                </button>
+              );
+            })}
           </div>
         </div>
 
         <PlayerBar
           side="white"
           name={names.X}
-          subtitle="les croix"
-          pieces={marksLeft('X')}
-          total={5}
+          subtitle={
+            isMoving
+              ? selected !== null
+                ? 'posez-le sur une case libre'
+                : 'prenez un pion'
+              : 'les croix'
+          }
+          pieces={PIECES_PER_PLAYER - state.placed.X}
+          total={PIECES_PER_PLAYER}
           isActive={state.current === 'X' && !finished}
           clock={clock}
         />

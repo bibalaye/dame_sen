@@ -295,3 +295,94 @@
     animation: none;
   }
 }
+
+/* Bandeau de phase : le jeu change de rythme, on le dit. */
+.phase {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  padding: 4px 12px;
+  border-radius: 50px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text-soft);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.phaseMove {
+  background: var(--brass);
+  border-color: var(--brass);
+  color: #201404;
+  animation: phaseIn 0.5s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+/* Une case libre où poser, pendant la phase 1. */
+.placeable::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16%;
+  height: 16%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Un pion qu'on peut prendre en main, en phase 2. */
+.grabbable {
+  cursor: grab;
+}
+
+.grabbable:hover {
+  background: var(--square-last);
+}
+
+/* Le pion en main. */
+.selected {
+  background: var(--square-selected);
+  box-shadow:
+    inset 0 0 0 3px var(--brass),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+/* Les cases voisines où il peut aller. */
+.destination::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 30%;
+  height: 30%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--dot-move);
+  animation: throb 1.3s ease-in-out infinite;
+}
+
+.destination:hover {
+  background: var(--square-selected);
+}
+
+@keyframes phaseIn {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.9); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+@keyframes throb {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.9; }
+  50% { transform: translate(-50%, -50%) scale(1.25); opacity: 0.6; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phaseMove,
+  .destination::after {
+    animation: none;
+  }
+}

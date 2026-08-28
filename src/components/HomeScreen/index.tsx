@@ -94,7 +94,7 @@ const HomeScreen: React.FC = () => {
         <p className={styles.pitch}>
           {kind === 'dames'
             ? 'Cinq cases sur cinq, tout en lignes droites. La prise est obligatoire, et une rafle bien vue renverse une partie.'
-            : 'Trois marques à aligner. Simple à apprendre — et impossible à battre contre le vieux.'}
+            : 'Trois pions chacun : on les pose, puis on les déplace jusqu’à en aligner trois. Deux phases, et jamais de position figée.'}
         </p>
       </header>
 

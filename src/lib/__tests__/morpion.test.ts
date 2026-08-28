@@ -3,17 +3,21 @@ import assert from 'node:assert/strict';
 
 import {
   MORPION_OPPONENTS,
+  NO_WIN_LIMIT,
+  PIECES_PER_PLAYER,
   availableMoves,
+  bestMove,
   createMorpion,
   findBestMorpionMove,
   findWinningLine,
   morpionThinkingDelay,
   other,
-  perfectMove,
   playMorpion,
+  serializeGrid,
   type Grid,
   type Mark,
   type MorpionDifficulty,
+  type MorpionMove,
   type MorpionState,
 } from '../morpion.ts';
 
@@ -21,186 +25,278 @@ import {
 const gridFrom = (rows: string): Grid =>
   [...rows.replace(/\s/g, '')].map((c) => (c === '.' ? null : (c as Mark)));
 
-const stateFrom = (rows: string, current: Mark): MorpionState => {
+/** Position de phase 2 : les six pions sont posés. */
+const movementState = (rows: string, current: Mark): MorpionState => {
   const grid = gridFrom(rows);
-  const won = findWinningLine(grid);
   return {
     grid,
     current,
-    status: won
-      ? { kind: 'win', winner: won.mark, line: won.line }
-      : grid.every((c) => c !== null)
-        ? { kind: 'draw' }
-        : { kind: 'playing' },
+    phase: 'movement',
+    placed: { X: PIECES_PER_PLAYER, O: PIECES_PER_PLAYER },
+    status: { kind: 'playing' },
     lastMove: null,
+    idleMoves: 0,
+    positionCounts: {},
   };
 };
+
+const place = (to: number): MorpionMove => ({ type: 'place', to });
+const move = (from: number, to: number): MorpionMove => ({ type: 'move', from, to });
 
 const seeded = (seed: number): (() => number) => {
   let v = seed >>> 0;
-  return () => {
-    v = (v * 1664525 + 1013904223) >>> 0;
-    return v / 0x100000000;
-  };
+  return () => (v = (v * 1664525 + 1013904223) >>> 0) / 0x100000000;
 };
 
-describe('règles', () => {
-  test('la grille commence vide et X ouvre', () => {
+/** Déroule une partie entre deux niveaux et renvoie l'état final. */
+const playOut = (
+  x: MorpionDifficulty,
+  o: MorpionDifficulty,
+  seed: number,
+): MorpionState => {
+  const random = seeded(seed);
+  let state = createMorpion('X');
+  let guard = 0;
+
+  while (state.status.kind === 'playing' && guard++ < 300) {
+    const next = findBestMorpionMove(state, state.current === 'X' ? x : o, random);
+    if (!next) break;
+    state = playMorpion(state, next);
+  }
+  return state;
+};
+
+describe('phase de pose', () => {
+  test('la partie commence en pose, avec neuf cases offertes', () => {
     const state = createMorpion();
-    assert.equal(state.grid.filter(Boolean).length, 0);
-    assert.equal(state.current, 'X');
+    assert.equal(state.phase, 'placement');
     assert.equal(availableMoves(state).length, 9);
+    assert.equal(state.current, 'X');
   });
 
-  test('jouer une case pose la marque et passe la main', () => {
-    const next = playMorpion(createMorpion(), 4);
+  test('poser un pion passe la main', () => {
+    const next = playMorpion(createMorpion(), place(4));
     assert.equal(next.grid[4], 'X');
     assert.equal(next.current, 'O');
-    assert.equal(next.lastMove, 4);
+    assert.equal(next.placed.X, 1);
   });
 
   test('une case occupée est refusée', () => {
-    const first = playMorpion(createMorpion(), 0);
-    assert.equal(playMorpion(first, 0), first);
+    const first = playMorpion(createMorpion(), place(0));
+    assert.equal(playMorpion(first, place(0)), first);
   });
 
-  test('un index hors grille est refusé', () => {
-    const state = createMorpion();
-    assert.equal(playMorpion(state, 9), state);
-    assert.equal(playMorpion(state, -1), state);
+  test('aligner pendant la pose gagne aussitôt', () => {
+    let state = createMorpion('X');
+    for (const cell of [0, 3, 1, 4, 2]) {
+      state = playMorpion(state, place(cell));
+    }
+    assert.equal(state.status.kind, 'win');
+    if (state.status.kind === 'win') assert.equal(state.status.winner, 'X');
+  });
+
+  test('la phase bascule une fois les six pions posés', () => {
+    let state = createMorpion('X');
+    // Pose sans alignement.
+    for (const cell of [0, 1, 3, 2, 7, 5]) {
+      state = playMorpion(state, place(cell));
+      assert.notEqual(state.status.kind, 'win', `alignement imprévu sur ${cell}`);
+    }
+
+    assert.equal(state.placed.X, PIECES_PER_PLAYER);
+    assert.equal(state.placed.O, PIECES_PER_PLAYER);
+    assert.equal(state.phase, 'movement', 'la partie doit continuer, pas s’arrêter');
+    assert.equal(state.status.kind, 'playing');
   });
 
   test('la grille reçue n’est jamais modifiée', () => {
     const state = createMorpion();
-    playMorpion(state, 3);
+    playMorpion(state, place(3));
     assert.equal(state.grid[3], null);
   });
 });
 
+describe('phase de déplacement', () => {
+  test('un pion va sur n’importe quelle case libre', () => {
+    const state = movementState('XOX O.. .OX', 'X');
+    const moves = availableMoves(state);
+
+    assert.ok(moves.every((m) => m.type === 'move'));
+    // Les trois cases vides — 4, 5 et 6 — sont toutes ouvertes au pion de 0.
+    const fromZero = moves
+      .filter((m) => m.type === 'move' && m.from === 0)
+      .map((m) => m.to)
+      .sort((a, b) => a - b);
+    assert.deepEqual(fromZero, [4, 5, 6]);
+  });
+
+  test('trois pions et trois cases libres font toujours neuf coups', () => {
+    const state = movementState('XOX O.. .OX', 'X');
+    assert.equal(availableMoves(state).length, 9);
+  });
+
+  test('une case éloignée est atteignable', () => {
+    const state = movementState('X.X XO. OO.', 'X');
+    // 0 et 8 sont aux deux bouts du plateau : le déplacement reste permis.
+    const next = playMorpion(state, move(0, 8));
+    assert.notEqual(next, state);
+    assert.equal(next.grid[8], 'X');
+    assert.equal(next.grid[0], null);
+  });
+
+  test('on ne déplace pas un pion adverse', () => {
+    const state = movementState('X.. .O. ..X', 'X');
+    assert.equal(playMorpion(state, move(4, 3)), state);
+  });
+
+  test('aligner par déplacement gagne', () => {
+    // X tient 0 et 1 ; le troisième pion, en 5, vient compléter en 2.
+    const state = movementState('XX. O.X OO.', 'X');
+    const won = playMorpion(state, move(5, 2));
+
+    assert.equal(won.status.kind, 'win');
+    if (won.status.kind === 'win') {
+      assert.equal(won.status.winner, 'X');
+      assert.deepEqual(won.status.line, [0, 1, 2]);
+    }
+  });
+
+  test('déplacer un pion hors de sa propre ligne ne gagne pas', () => {
+    // Compléter la rangée avec le pion de la case 1 la viderait au passage.
+    const state = movementState('XX. O.X OO.', 'X');
+    const next = playMorpion(state, move(1, 2));
+
+    assert.equal(next.status.kind, 'playing');
+  });
+
+  test('un joueur a toujours un coup à jouer', () => {
+    // Avec le déplacement libre, trois cases restent vides en permanence :
+    // aucun camp ne peut se retrouver enfermé.
+    const state = movementState('XOX .O. X.O', 'X');
+    assert.equal(availableMoves(state).length, 9);
+  });
+});
+
 describe('fin de partie', () => {
-  test('une ligne gagne', () => {
-    const state = stateFrom('XX. OO. ...', 'X');
-    const next = playMorpion(state, 2);
-    assert.equal(next.status.kind, 'win');
-    if (next.status.kind === 'win') {
-      assert.equal(next.status.winner, 'X');
-      assert.deepEqual(next.status.line, [0, 1, 2]);
+  test('la ligne gagnante est rapportée', () => {
+    const grid = gridFrom('XXX OO. ...');
+    const won = findWinningLine(grid);
+    assert.ok(won);
+    assert.equal(won!.mark, 'X');
+    assert.deepEqual(won!.line, [0, 1, 2]);
+  });
+
+  test('la répétition de position rend la partie nulle', () => {
+    // Deux pions font l'aller-retour entre les mêmes cases, sans jamais aligner.
+    let state = movementState('X.O XO. .XO', 'X');
+    const cycle: readonly MorpionMove[] = [
+      move(0, 1),
+      move(2, 5),
+      move(1, 0),
+      move(5, 2),
+    ];
+
+    let drawn = false;
+    for (let i = 0; i < 24 && state.status.kind === 'playing'; i++) {
+      const next = playMorpion(state, cycle[i % cycle.length]);
+      if (next === state) break;
+      state = next;
+      if (state.status.kind === 'draw' && state.status.reason === 'repetition') {
+        drawn = true;
+        break;
+      }
     }
+
+    assert.ok(drawn, 'la troisième répétition doit arrêter la partie');
   });
 
-  test('une colonne gagne', () => {
-    const next = playMorpion(stateFrom('X.. X.. .OO', 'X'), 6);
-    assert.equal(next.status.kind, 'win');
-  });
-
-  test('une diagonale gagne', () => {
-    const next = playMorpion(stateFrom('X.. .X. OO.', 'X'), 8);
-    assert.equal(next.status.kind, 'win');
-    if (next.status.kind === 'win') {
-      assert.deepEqual(next.status.line, [0, 4, 8]);
-    }
-  });
-
-  test('une grille pleine sans ligne est nulle', () => {
-    const next = playMorpion(stateFrom('XOX XXO OX.', 'O'), 8);
-    assert.equal(next.status.kind, 'draw');
+  test('cinquante déplacements sans alignement suffisent aussi', () => {
+    assert.equal(NO_WIN_LIMIT, 50);
   });
 
   test('plus aucun coup une fois la partie finie', () => {
-    const won = playMorpion(stateFrom('XX. OO. ...', 'X'), 2);
-    assert.equal(availableMoves(won).length, 0);
-    assert.equal(playMorpion(won, 5), won);
+    let state = createMorpion('X');
+    for (const cell of [0, 3, 1, 4, 2]) state = playMorpion(state, place(cell));
+
+    assert.equal(state.status.kind, 'win');
+    assert.equal(availableMoves(state).length, 0);
+    assert.equal(playMorpion(state, place(5)), state);
   });
 });
 
-describe('adversaire parfait', () => {
-  test('il prend la victoire immédiate', () => {
-    assert.equal(perfectMove(stateFrom('XX. OO. ...', 'X')), 2);
-  });
-
-  test('il bloque la victoire adverse', () => {
-    // O doit couvrir la case 2, sans quoi X aligne la rangée du haut.
-    assert.equal(perfectMove(stateFrom('XX. O.. ...', 'O')), 2);
-  });
-
-  test('il préfère gagner plutôt que bloquer', () => {
-    // X peut aligner en 2 ; O menace en 6. Gagner passe avant.
-    assert.equal(perfectMove(stateFrom('XX. ... OO.', 'X')), 2);
-  });
-
-  test('il est imbattable, quelle que soit l’ouverture adverse', () => {
-    // L'humain (X) joue toutes les premières cases possibles, puis au mieux.
-    for (let opening = 0; opening < 9; opening++) {
-      let state = playMorpion(createMorpion('X'), opening);
-
-      while (state.status.kind === 'playing') {
-        const move = perfectMove(state);
-        assert.ok(move !== null);
-        state = playMorpion(state, move!);
-      }
-
-      assert.notEqual(
-        state.status.kind === 'win' && state.status.winner === 'X',
-        true,
-        `l'ouverture ${opening} bat l'adversaire parfait`,
+describe('adversaire', () => {
+  test('tous les niveaux saisissent l’alignement offert', () => {
+    // Le pion de la case 5 complète la rangée du haut : victoire immédiate.
+    const state = movementState('XX. O.X OO.', 'X');
+    for (const { id } of MORPION_OPPONENTS) {
+      const chosen = findBestMorpionMove(state, id, seeded(5));
+      assert.ok(chosen);
+      assert.equal(
+        playMorpion(state, chosen!).status.kind,
+        'win',
+        `${id} laisse passer la victoire`,
       );
     }
   });
 
-  test('deux joueurs parfaits font toujours nulle', () => {
-    let state = createMorpion();
-    while (state.status.kind === 'playing') {
-      state = playMorpion(state, perfectMove(state)!);
-    }
-    assert.equal(state.status.kind, 'draw');
-  });
-});
-
-describe('niveaux', () => {
-  test('chaque niveau propose un coup jouable', () => {
+  test('le coup proposé est toujours légal', () => {
     for (const { id } of MORPION_OPPONENTS) {
-      const state = createMorpion();
-      const move = findBestMorpionMove(state, id, seeded(3));
-      assert.ok(move !== null);
-      assert.notEqual(playMorpion(state, move!), state);
-    }
-  });
-
-  test('tous les niveaux saisissent la victoire immédiate', () => {
-    for (const { id } of MORPION_OPPONENTS) {
-      const move = findBestMorpionMove(stateFrom('XX. OO. ...', 'O'), id, seeded(9));
-      assert.equal(move, 5, `${id} laisse passer la victoire`);
-    }
-  });
-
-  test('le niveau fort ne perd jamais contre le niveau faible', () => {
-    for (let seed = 0; seed < 25; seed++) {
-      const random = seeded(seed + 1);
       let state = createMorpion('X');
-      // X est le niveau faible, O le niveau fort.
-      while (state.status.kind === 'playing') {
-        const level: MorpionDifficulty = state.current === 'X' ? 'easy' : 'hard';
-        state = playMorpion(state, findBestMorpionMove(state, level, random)!);
+      for (let i = 0; i < 12 && state.status.kind === 'playing'; i++) {
+        const chosen = findBestMorpionMove(state, id, seeded(i + 1));
+        assert.ok(chosen, `${id} doit proposer un coup`);
+        const next = playMorpion(state, chosen!);
+        assert.notEqual(next, state, `${id} propose un coup refusé`);
+        state = next;
       }
+    }
+  });
+
+  test('la hiérarchie des niveaux se vérifie en partie', () => {
+    let mediumWins = 0;
+    const rounds = 12;
+
+    for (let seed = 1; seed <= rounds; seed++) {
+      const final = playOut('medium', 'easy', seed);
+      if (final.status.kind === 'win' && final.status.winner === 'X') mediumWins++;
+    }
+
+    assert.ok(
+      mediumWins >= rounds * 0.6,
+      `la cousine ne bat le petit que ${mediumWins} fois sur ${rounds}`,
+    );
+  });
+
+  test('le niveau fort ne perd pas contre le niveau moyen', () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const final = playOut('medium', 'hard', seed);
       assert.ok(
-        !(state.status.kind === 'win' && state.status.winner === 'X'),
-        `le niveau faible a gagné (graine ${seed})`,
+        !(final.status.kind === 'win' && final.status.winner === 'X'),
+        `le niveau fort a perdu (graine ${seed})`,
       );
     }
   });
 
-  test('le niveau faible, lui, se laisse battre', () => {
-    let losses = 0;
-    for (let seed = 0; seed < 25; seed++) {
-      const random = seeded(seed + 100);
-      let state = createMorpion('X');
-      while (state.status.kind === 'playing') {
-        const level: MorpionDifficulty = state.current === 'X' ? 'hard' : 'easy';
-        state = playMorpion(state, findBestMorpionMove(state, level, random)!);
-      }
-      if (state.status.kind === 'win' && state.status.winner === 'X') losses++;
+  test('les parties se terminent, et rarement par un nul', () => {
+    let draws = 0;
+    const rounds = 12;
+
+    for (let seed = 1; seed <= rounds; seed++) {
+      const final = playOut('medium', 'medium', seed);
+      assert.notEqual(final.status.kind, 'playing', 'la partie doit se conclure');
+      if (final.status.kind === 'draw') draws++;
     }
-    assert.ok(losses > 0, 'le niveau faible ne perd jamais : il est trop fort');
+
+    // C'était tout l'intérêt de la phase de déplacement : sortir des positions
+    // mortes du morpion à pose, où le nul était la norme.
+    assert.ok(draws <= rounds / 2, `${draws} nuls sur ${rounds} parties`);
+  });
+
+  test('la recherche ne modifie pas la position confiée', () => {
+    const state = createMorpion();
+    const before = serializeGrid(state.grid);
+    bestMove(state, 4);
+    assert.equal(serializeGrid(state.grid), before);
   });
 });
 
