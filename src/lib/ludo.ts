@@ -377,17 +377,33 @@ const movesForPawn = (
     ];
   }
 
-  // --- Sa propre allée : compte exact, ou un six -----------------------------
+  // --- Sa propre allée : compte exact pour avancer, un six pour ressortir ----
   if (spot.zone === 'home') {
     const step = spot.step + die;
 
     /*
-     * Un six sort le pion pour de bon, d'où qu'il soit dans l'allée. Sans cela,
-     * un pion à deux cases du centre pouvait attendre des tours entiers le
-     * chiffre exact, pendant que la partie se jouait ailleurs.
+     * Un six ramène le pion sur le circuit, à son seuil — d'où qu'il soit dans
+     * l'allée. Rentrer n'est donc jamais définitif : on peut ressortir pour
+     * aller prendre, ou pour ne pas laisser un pion attendre le chiffre exact
+     * pendant que la partie se joue ailleurs.
+     *
+     * Le six ne servait de toute façon à rien ici : l'allée ne compte que cinq
+     * cases, et il en aurait fallu une sixième pour tomber juste.
      */
     if (die === 6) {
-      return [{ kind: 'home', pawn: index, die, to: { zone: 'finished' } }];
+      const square = homeGate(pawn.owner);
+      const landing = landingOnTrack(state, square, pawn.owner);
+      if (!landing.allowed) return [];
+
+      return [
+        {
+          kind: 'escape',
+          pawn: index,
+          die,
+          to: { zone: 'track', square },
+          ...(landing.captures?.length ? { captures: landing.captures } : {}),
+        },
+      ];
     }
 
     // La dernière case franchie mène au centre ; au-delà, le coup est refusé.

@@ -272,6 +272,21 @@ describe('priorités du joueur artificiel', () => {
     assert.equal(choix?.kind, 'free', 'un pion prisonnier ne sert à rien');
   });
 
+  test('il ne ressort pas de sa propre allée sans raison', () => {
+    // Un six ouvre la sortie ; il ne faut pas la prendre pour autant, sous
+    // peine de rendre les cases déjà gagnées.
+    const state = etat(
+      [
+        { owner: 0, spot: dansMaison(0, 3) },
+        { owner: 0, spot: surCase(20) },
+      ],
+      { current: 0, dice: [6, 2] },
+    );
+
+    const choix = chooseLudoMove(state, 'hard', sansHasard);
+    assert.notEqual(choix?.kind, 'escape', 'reculer chez soi n’est pas un progrès');
+  });
+
   test('il se dégage d’une allée où il s’est aventuré', () => {
     const state = etat(
       [

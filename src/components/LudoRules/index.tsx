@@ -101,8 +101,12 @@ const LudoRules: React.FC<LudoRulesProps> = ({ onClose }) => (
         rentré ne fait plus que compter.
       </p>
       <p>
-        Dans l’allée, le compte exact mène au centre — ou un{' '}
-        <strong>6</strong>, d’où que vous soyez.
+        Dans l’allée, seul le <strong>compte exact</strong> mène au centre.
+      </p>
+      <p>
+        Et rentrer n’est jamais définitif : un <strong>6</strong> ressort le
+        pion sur le circuit, à votre seuil — pour aller prendre, ou pour ne pas
+        l’y laisser attendre le bon chiffre.
       </p>
     </section>
 

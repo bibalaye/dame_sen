@@ -57,6 +57,8 @@ const SCORES = {
   free: 85,
   /** Se dégager d'une allée adverse, où l'on ne fait rien de bon. */
   escape: 75,
+  /** Ressortir de sa propre allée : on rend des cases déjà gagnées. */
+  leaveOwnHome: -55,
   /** Mettre un pion en jeu. */
   enter: 60,
   /** Entrer dans sa propre allée : plus rien ne peut l'y atteindre… ou presque. */
@@ -157,9 +159,18 @@ export const scoreLudoMove = (state: LudoState, move: LudoMove): number => {
 
   if (move.to.zone === 'finished') score += SCORES.finish;
   else if (move.kind === 'free') score += SCORES.free;
-  else if (move.kind === 'escape') score += SCORES.escape;
   else if (move.kind === 'enter') score += SCORES.enter;
   else if (move.kind === 'home') score += SCORES.homeEntry;
+  else if (move.kind === 'escape') {
+    /*
+     * Se dégager d'une allée adverse est excellent — on n'y fait rien de bon.
+     * Ressortir de la sienne est le contraire : on renonce à des cases déjà
+     * gagnées. L'un et l'autre portent le même nom de coup, et les confondre
+     * ferait faire demi-tour au joueur artificiel à chaque six.
+     */
+    const chezSoi = pawn.spot.zone === 'home' && pawn.spot.host === pawn.owner;
+    score += chezSoi ? SCORES.leaveOwnHome : SCORES.escape;
+  }
 
   if (formeBarrage(state, move)) score += SCORES.blockade;
 

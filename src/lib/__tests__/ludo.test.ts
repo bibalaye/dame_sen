@@ -463,19 +463,50 @@ describe('allée finale', () => {
     assert.ok(progressOf(apres.pawns[tout_droit.pawn]) < 5);
   });
 
-  test('un six sort le pion de son allée, d’où qu’il soit', () => {
-    // Sans cela, un pion à deux cases du centre attendait des tours entiers le
-    // chiffre exact.
+  test('un six ramène le pion de son allée sur le circuit', () => {
+    // Rentrer n'est jamais définitif : un six ressort le pion à son seuil,
+    // d'où qu'il soit dans l'allée.
     for (const step of [0, 1, 2, 3, 4]) {
       const state = etat([{ owner: 0, spot: dansMaison(0, step) }], {
         current: 0,
         dice: [6, 1],
       });
 
-      const sortie = legalLudoMoves(state).find((m) => m.to.zone === 'finished');
-      assert.ok(sortie, `le six doit sortir le pion depuis la case ${step}`);
-      assert.equal(sortie!.die, 6);
+      const sortie = legalLudoMoves(state).find((m) => m.kind === 'escape');
+      assert.ok(sortie, `le six doit ressortir le pion depuis la case ${step}`);
+      assert.deepEqual(sortie!.to, { zone: 'track', square: homeGate(0) });
     }
+  });
+
+  test('le six ne fait pas rentrer au centre', () => {
+    // Seul le compte exact mène au centre ; le six sert à ressortir.
+    const state = etat([{ owner: 0, spot: dansMaison(0, HOME_LENGTH - 1) }], {
+      current: 0,
+      dice: [6, 1],
+    });
+
+    const moves = legalLudoMoves(state);
+    assert.ok(
+      moves.some((m) => m.die === 1 && m.to.zone === 'finished'),
+      'le un tombe juste et rentre le pion',
+    );
+    assert.ok(
+      !moves.some((m) => m.die === 6 && m.to.zone === 'finished'),
+      'le six ressort, il ne rentre pas',
+    );
+  });
+
+  test('en ressortant, le pion peut prendre ce qui est sur son seuil', () => {
+    const state = etat(
+      [
+        { owner: 0, spot: dansMaison(0, 2) },
+        { owner: 1, spot: surCase(homeGate(0)) },
+      ],
+      { current: 0, dice: [6, 1] },
+    );
+
+    const sortie = legalLudoMoves(state).find((m) => m.kind === 'escape');
+    assert.equal(sortie!.captures?.length, 1, 'le seuil se libère à la prise');
   });
 
   test('il faut le compte exact pour atteindre le centre', () => {
