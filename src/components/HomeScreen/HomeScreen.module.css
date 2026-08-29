@@ -487,3 +487,17 @@
   line-height: 19px;
   text-align: center;
 }
+
+/* Aperçu du ludo : les quatre écuries aux coins, la croix au milieu. */
+.previewLudo {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  padding: 3px;
+  background: var(--square-dark);
+}
+
+.previewLudo .previewCell {
+  border-radius: 2px;
+  background: var(--square-light);
+}

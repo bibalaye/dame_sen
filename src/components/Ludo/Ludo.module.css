@@ -1,0 +1,291 @@
+/*
+ * Le Ludo.
+ *
+ * Le plateau est une grille de quinze sur quinze : les cases, les écuries et
+ * les pions s'y placent tous par `grid-row` et `grid-column`, à partir des
+ * coordonnées calculées dans `ludoBoard.ts`. Aucun positionnement absolu — la
+ * grille suffit, et le plateau reste carré à toutes les tailles.
+ */
+
+.screen {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom);
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(201, 146, 46, 0.18), transparent 65%),
+    linear-gradient(170deg, #3a2712 0%, #2a1c0e 55%, #1d1309 100%);
+}
+
+/* --- En-tête ---------------------------------------------------------------- */
+
+.top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+}
+
+.back {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  font-size: 1rem;
+}
+
+.turn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 2px solid var(--line);
+  border-radius: 50px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* --- Plateau ---------------------------------------------------------------- */
+
+.boardWrapper {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  grid-template-rows: repeat(15, 1fr);
+
+  /* Le plateau reste carré et tient dans ce qui reste de l'écran. */
+  width: min(94vw, 62vh, 520px);
+  aspect-ratio: 1;
+
+  padding: 6px;
+  border: 3px solid var(--wood-dark);
+  border-radius: 14px;
+  background: var(--surface-sunk);
+  box-shadow: var(--shadow-lift);
+}
+
+.cell {
+  border: 1px solid transparent;
+  border-radius: 2px;
+}
+
+/* Les cases du circuit se voient ; le reste du plateau est un fond. */
+.track {
+  border-color: color-mix(in srgb, var(--text) 22%, transparent);
+  background: var(--surface);
+}
+
+.lane {
+  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+}
+
+.center {
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--brass), var(--wood-dark));
+}
+
+/* Une case d'arrivée possible : c'est le seul élément qui bouge à l'écran, et
+   il indique où le pion choisi peut aller. */
+.target {
+  border: 2px solid var(--green);
+  background: color-mix(in srgb, var(--green) 45%, var(--surface));
+  cursor: pointer;
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .target {
+    animation: none;
+  }
+}
+
+/* Les écuries, en fond derrière les cases. */
+.stable {
+  border: 3px solid;
+  border-radius: 12px;
+}
+
+/* --- Pions ------------------------------------------------------------------ */
+
+.pawnSlot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  /* Les pions passent au-dessus des cases sans quitter la grille. */
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pawn {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  pointer-events: auto;
+  cursor: default;
+  transition: filter 0.18s ease;
+}
+
+.pawn img {
+  width: 116%;
+  height: 116%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 2px rgba(20, 12, 4, 0.55));
+}
+
+/* Un pion jouable s'éclaire : sans cela, on tâtonne à chaque lancer. */
+.playable {
+  cursor: pointer;
+}
+
+.playable img {
+  filter: drop-shadow(0 0 4px var(--green)) drop-shadow(0 2px 2px rgba(20, 12, 4, 0.55));
+}
+
+.selected img {
+  filter: drop-shadow(0 0 6px var(--brass)) drop-shadow(0 2px 2px rgba(20, 12, 4, 0.6));
+  transform: scale(1.12);
+}
+
+/* Un prisonnier se distingue de ceux qui attendent chez eux : il est retenu
+   ailleurs, et son propriétaire doit le voir. */
+.captive img {
+  filter: grayscale(0.7) drop-shadow(0 2px 2px rgba(20, 12, 4, 0.5));
+  opacity: 0.75;
+}
+
+/* Au-delà de deux pions sur une case, on compte plutôt que d'empiler. */
+.stack {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  min-width: 15px;
+  height: 15px;
+  border-radius: 50px;
+  background: var(--text);
+  color: var(--surface);
+  font-size: 0.55rem;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+  z-index: 3;
+}
+
+/* Un barrage se signale : c'est une information de jeu, pas un détail. */
+.blockade {
+  position: absolute;
+  inset: -2px;
+  border: 2px solid var(--red);
+  border-radius: 4px;
+  z-index: 1;
+}
+
+/* --- Dés et messages -------------------------------------------------------- */
+
+.bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 10px;
+}
+
+.dice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+}
+
+.die {
+  display: grid;
+  place-items: center;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  animation: land 0.3s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+@keyframes land {
+  from { transform: scale(0.6) rotate(-18deg); opacity: 0; }
+  to { transform: scale(1) rotate(0); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .die {
+    animation: none;
+  }
+}
+
+.roll {
+  min-height: 52px;
+  padding: 0 26px;
+  font-size: 0.95rem;
+}
+
+.notice,
+.hint {
+  margin: 0;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.notice {
+  color: var(--brass);
+  font-weight: 700;
+}
+
+.hint {
+  color: rgba(253, 246, 232, 0.72);
+}
+
+/* --- Fin de partie ---------------------------------------------------------- */
+
+.over {
+  text-align: center;
+}
+
+.over h2 {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  color: var(--text);
+}
+
+.again {
+  width: 100%;
+  min-height: 52px;
+}
+
+/* Sur un écran bas, le plateau cède la place aux dés plutôt que de les pousser
+   hors de vue. */
+@media (max-height: 640px) {
+  .board {
+    width: min(94vw, 54vh, 520px);
+  }
+}

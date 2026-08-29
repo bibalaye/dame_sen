@@ -10,7 +10,7 @@
  * deux fonctions, tout le reste se calcule et se teste sans navigateur.
  */
 
-export type GameKindId = 'dames' | 'morpion';
+export type GameKindId = 'dames' | 'morpion' | 'ludo';
 export type GameModeId = 'solo' | 'pass' | 'online' | 'daily';
 export type GameResult = 'win' | 'loss' | 'draw';
 
@@ -128,7 +128,7 @@ const isEntry = (value: unknown): value is HistoryEntry => {
   const entry = value as Partial<HistoryEntry>;
   return (
     typeof entry.id === 'string' &&
-    (entry.game === 'dames' || entry.game === 'morpion') &&
+    (entry.game === 'dames' || entry.game === 'morpion' || entry.game === 'ludo') &&
     (entry.result === 'win' || entry.result === 'loss' || entry.result === 'draw') &&
     typeof entry.playedAt === 'number'
   );

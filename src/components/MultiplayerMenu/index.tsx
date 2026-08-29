@@ -128,7 +128,7 @@ const MultiplayerMenu: React.FC = () => {
         {friendsOpen && (
           <FriendsPanel
             onClose={() => setFriendsOpen(false)}
-            room={{ id: roomId, game: kind }}
+            room={{ id: roomId, game: kind === 'ludo' ? 'dames' : kind }}
           />
         )}
         {isWaitingForOpponent ? (

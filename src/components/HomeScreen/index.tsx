@@ -33,6 +33,7 @@ export const OPPONENTS: ReadonlyArray<{
 const GAMES: ReadonlyArray<{ id: GameKind; name: string; detail: string }> = [
   { id: 'dames', name: 'Dames', detail: '5×5 · rafles' },
   { id: 'morpion', name: 'Morpion', detail: '3 pions · 2 phases' },
+  { id: 'ludo', name: 'Ludo', detail: '4 pions · 2 dés' },
 ];
 
 const MODES: ReadonlyArray<{
@@ -41,10 +42,15 @@ const MODES: ReadonlyArray<{
   detail: string;
   /** Le défi du jour repose sur une position de dames. */
   damesOnly?: boolean;
+  /**
+   * Le ludo ne se joue pas encore à distance : le dé devra venir du serveur,
+   * faute de quoi un client annoncerait ses propres six sans être contredit.
+   */
+  exceptLudo?: boolean;
 }> = [
   { id: 'solo', label: 'Solo', detail: 'Contre la machine' },
   { id: 'pass', label: 'À deux', detail: 'Sur cet appareil' },
-  { id: 'online', label: 'En ligne', detail: 'Par lien partagé' },
+  { id: 'online', label: 'En ligne', detail: 'Par lien partagé', exceptLudo: true },
   { id: 'daily', label: 'Défi', detail: 'Le puzzle du jour', damesOnly: true },
 ];
 
@@ -69,6 +75,26 @@ const MORPION_VARIANTS: ReadonlyArray<{
 
 /** Aperçu du plateau : un jeu se choisit sur image, pas sur mot. */
 const BoardPreview: React.FC<{ kind: GameKind }> = ({ kind }) => {
+  if (kind === 'ludo') {
+    // Les quatre écuries et la croix : la silhouette d'un plateau de ludo se
+    // reconnaît sans qu'on ait à lire son nom.
+    const teintes = ['var(--red)', 'var(--green)', 'var(--indigo)', 'var(--brass)'];
+    return (
+      <span className={`${styles.preview} ${styles.previewLudo}`} aria-hidden="true">
+        {Array.from({ length: 9 }, (_, i) => {
+          const coin = [0, 2, 6, 8].indexOf(i);
+          return (
+            <span
+              key={i}
+              className={styles.previewCell}
+              style={coin !== -1 ? { background: teintes[coin] } : undefined}
+            />
+          );
+        })}
+      </span>
+    );
+  }
+
   if (kind === 'morpion') {
     const marks: Record<number, 'x' | 'o'> = { 0: 'x', 4: 'o', 8: 'x', 2: 'o' };
     return (
@@ -147,7 +173,10 @@ const HomeScreen: React.FC = () => {
   const [timeControl, setTimeControl] = useState<TimeControl>('none');
   const [morpionVariant, setMorpionVariant] = useState<MorpionVariant>('moving-heart');
 
-  const modes = MODES.filter((entry) => kind === 'dames' || !entry.damesOnly);
+  const modes = MODES.filter(
+    (entry) =>
+      (kind === 'dames' || !entry.damesOnly) && (kind !== 'ludo' || !entry.exceptLudo),
+  );
 
   const opponents =
     kind === 'dames'
@@ -161,10 +190,12 @@ const HomeScreen: React.FC = () => {
   const handleKind = (next: GameKind) => {
     play('click');
     setKind(next);
-    if (next === 'morpion') {
+    if (next !== 'dames') {
       if (mode === 'daily') setMode('solo');
       if (difficulty === 'expert') setDifficulty('hard');
     }
+    // Le ludo ne se joue pas encore à distance.
+    if (next === 'ludo' && mode === 'online') setMode('solo');
   };
 
   const cta =

@@ -69,6 +69,23 @@ const salleAvecDeuxJoueurs = async () => {
 };
 
 before(async () => {
+  /*
+   * Un serveur laissé en marche par une exécution précédente répondrait à
+   * notre place, et les tests porteraient sur lui — ou échoueraient sur un
+   * « le serveur n'a pas démarré » qui n'explique rien.
+   */
+  try {
+    const dejaLa = await fetch(`${URL}/healthz`);
+    if (dejaLa.ok) {
+      throw new Error(
+        `Le port ${PORT} est déjà occupé. Arrêtez le serveur qui y répond avant de relancer les tests.`,
+      );
+    }
+  } catch (cause) {
+    if (String(cause.message).includes('déjà occupé')) throw cause;
+    // Aucune réponse : le port est libre, c'est ce qu'on veut.
+  }
+
   serveur = spawn(process.execPath, ['server.js'], {
     env: { ...process.env, PORT: String(PORT) },
     stdio: 'ignore',

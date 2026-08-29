@@ -93,6 +93,7 @@ alter table public.profiles add column if not exists board_theme text not null d
 alter table public.profiles add column if not exists frame text;
 alter table public.profiles add column if not exists title text;
 
+
 -- --- Parties ----------------------------------------------------------------
 
 create table if not exists public.games (
@@ -102,7 +103,7 @@ create table if not exists public.games (
   id text not null,
   player_id uuid not null references public.profiles(id) on delete cascade,
 
-  game text not null check (game in ('dames', 'morpion')),
+  game text not null check (game in ('dames', 'morpion', 'ludo')),
   mode text not null check (mode in ('solo', 'pass', 'online', 'daily')),
   result text not null check (result in ('win', 'loss', 'draw')),
   opponent text not null default '',
@@ -114,6 +115,21 @@ create table if not exists public.games (
 
 create index if not exists games_player_played_at_idx
   on public.games (player_id, played_at desc);
+
+-- Le ludo est arrivé après les deux premiers jeux : la contrainte doit
+-- l'accepter, sinon aucune de ses parties ne s'enregistre.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.table_constraints
+    where table_schema = 'public' and constraint_name = 'games_game_check'
+  ) then
+    alter table public.games drop constraint games_game_check;
+  end if;
+
+  alter table public.games
+    add constraint games_game_check check (game in ('dames', 'morpion', 'ludo'));
+end $$;
 
 -- --- Catalogue ---------------------------------------------------------------
 
@@ -657,7 +673,7 @@ begin
   -- ce qui ne rentre pas dans les colonnes plutôt que de laisser lever.
   where entry->>'id' is not null
     and entry->>'playedAt' ~ '^[0-9]+$'
-    and entry->>'game' in ('dames', 'morpion')
+    and entry->>'game' in ('dames', 'morpion', 'ludo')
     and entry->>'mode' in ('solo', 'pass', 'online', 'daily')
     and entry->>'result' in ('win', 'loss', 'draw')
   on conflict (player_id, id) do nothing;
@@ -730,7 +746,7 @@ create table if not exists public.game_invites (
   from_id uuid not null references public.profiles(id) on delete cascade,
   to_id uuid not null references public.profiles(id) on delete cascade,
   room_id text not null,
-  game text not null check (game in ('dames', 'morpion')),
+  game text not null check (game in ('dames', 'morpion', 'ludo')),
   created_at timestamptz not null default now()
 );
 
@@ -980,7 +996,7 @@ begin
   if v_uid is null then
     raise exception 'non authentifie';
   end if;
-  if p_game not in ('dames', 'morpion') then
+  if p_game not in ('dames', 'morpion', 'ludo') then
     raise exception 'jeu inconnu';
   end if;
 

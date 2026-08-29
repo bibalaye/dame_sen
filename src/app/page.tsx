@@ -5,6 +5,7 @@ import GameBoard from '@/components/GameBoard';
 import InviteBanner from '@/components/InviteBanner';
 import HomeScreen from '@/components/HomeScreen';
 import Morpion from '@/components/Morpion';
+import Ludo from '@/components/Ludo';
 import { useGameContext } from '@/context/GameContext';
 import type { MorpionDifficulty } from '@/lib/morpion';
 
@@ -15,7 +16,8 @@ import type { MorpionDifficulty } from '@/lib/morpion';
  * Tous passent par la porte d'entrée : sans compte, on ne joue pas.
  */
 export default function Page() {
-  const { screen, kind, mode, difficulty, morpionVariant } = useGameContext();
+  const { screen, kind, mode, difficulty, morpionVariant, goHome, recordGame } =
+    useGameContext();
 
   if (screen === 'home') {
     return (
@@ -23,6 +25,35 @@ export default function Page() {
         <main>
           <InviteBanner />
           <HomeScreen />
+        </main>
+      </AuthGate>
+    );
+  }
+
+  if (kind === 'ludo') {
+    // Le ludo tient son propre état : il ne partage ni plateau ni moteur avec
+    // les deux autres, et ne connaît pour l'instant que le solo et le duel
+    // sur un même appareil.
+    return (
+      <AuthGate>
+        <main>
+          <InviteBanner />
+          <Ludo
+            mode={mode === 'pass' ? 'pass' : 'solo'}
+            difficulty={
+              difficulty === 'easy' ? 'easy' : difficulty === 'medium' ? 'medium' : 'hard'
+            }
+            onExit={goHome}
+            onFinish={(won) =>
+              recordGame({
+                game: 'ludo',
+                mode: mode === 'pass' ? 'pass' : 'solo',
+                result: won ? 'win' : 'loss',
+                opponent: mode === 'pass' ? 'Duel local' : difficulty,
+                playedAt: Date.now(),
+              })
+            }
+          />
         </main>
       </AuthGate>
     );

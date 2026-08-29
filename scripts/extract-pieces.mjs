@@ -147,3 +147,22 @@ if (doublons.length > 0) {
 }
 
 console.log('Chaque dame se distingue de son pion, et aucun fichier n’est en double.');
+
+// --- Dés du ludo -------------------------------------------------------------
+
+const DES = 'public/assets/dice';
+mkdirSync(DES, { recursive: true });
+
+let desCopies = 0;
+for (let face = 1; face <= 6; face++) {
+  const depuis = join(SOURCE, '..', 'Dice', `dieWhite_border${face}.png`);
+  const vers = join(DES, `die-${face}.png`);
+
+  // Le dé blanc bordé se lit sur n'importe quel fond, contrairement au rouge.
+  if (existsSync(depuis) && !existsSync(vers)) {
+    copyFileSync(depuis, vers);
+    desCopies++;
+  }
+}
+
+console.log(desCopies > 0 ? `${desCopies} faces de dé copiées` : 'Dés déjà en place.');

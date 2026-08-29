@@ -143,7 +143,7 @@ export type Screen = 'home' | 'game';
 export type GameMode = 'solo' | 'pass' | 'online' | 'daily';
 
 /** Les jeux proposés. Chacun a son propre plateau et ses propres règles. */
-export type GameKind = 'dames' | 'morpion';
+export type GameKind = 'dames' | 'morpion' | 'ludo';
 
 /** Suivi de la partie quotidienne : essais consommés et résultat. */
 export interface DailyState {
@@ -1328,8 +1328,15 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const createRoom = useCallback(
     (username: string) => {
-      // La salle porte le jeu choisi : celui qui rejoindra ouvrira le même.
-      socketCreateRoom(username, kind);
+      /*
+       * La salle porte le jeu choisi : celui qui rejoindra ouvrira le même.
+       *
+       * Le ludo ne se joue pas encore à distance — le dé devra venir du serveur,
+       * faute de quoi un client annoncerait ses propres six sans être contredit.
+       * L'accueil ne propose donc pas le mode en ligne pour lui ; ce repli n'est
+       * qu'un garde-fou.
+       */
+      socketCreateRoom(username, kind === 'ludo' ? 'dames' : kind);
       setIsWaitingForOpponent(true);
       setNotice("En attente d'un adversaire…");
     },
