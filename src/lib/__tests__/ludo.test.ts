@@ -554,6 +554,51 @@ describe('déroulement du tour', () => {
     assert.deepEqual(apres.dice, [5], 'l’autre dé reste à jouer');
   });
 
+  test('le même pion enchaîne ses deux dés, prise comprise', () => {
+    // Le geste le plus courant : avancer de trois pour prendre, puis de cinq
+    // pour s'éloigner de la case où l'on vient de frapper.
+    const state = etat(
+      [
+        { owner: 0, spot: surCase(10) },
+        { owner: 1, spot: surCase(13) },
+      ],
+      { current: 0, dice: [3, 5] },
+    );
+
+    const prise = legalLudoMoves(state).find((m) => m.captures?.length);
+    assert.ok(prise, 'le trois doit prendre');
+    assert.equal(prise!.die, 3);
+
+    const apres = playLudoMove(state, prise!);
+    const suite = legalLudoMoves(apres).filter((m) => m.pawn === prise!.pawn);
+
+    assert.deepEqual(apres.dice, [5]);
+    assert.equal(suite.length, 1, 'le même pion doit pouvoir jouer le cinq');
+    assert.deepEqual(suite[0].to, { zone: 'track', square: 18 });
+  });
+
+  test('renoncer à la prise laisse jouer les deux dés à la suite', () => {
+    // L'autre branche du choix : avancer de huit d'affilée sans rien prendre.
+    const state = etat(
+      [
+        { owner: 0, spot: surCase(10) },
+        { owner: 1, spot: surCase(13) },
+      ],
+      { current: 0, dice: [3, 5] },
+    );
+
+    const sansPrise = legalLudoMoves(state).find((m) => m.die === 5)!;
+    const apres = playLudoMove(state, sansPrise);
+    const suite = legalLudoMoves(apres).filter((m) => m.pawn === sansPrise.pawn);
+
+    assert.equal(suite.length, 1);
+    assert.deepEqual(
+      suite[0].to,
+      { zone: 'track', square: 18 },
+      'huit cases au total, par l’autre chemin',
+    );
+  });
+
   test('il faut un double-six pour rejouer, pas un six', () => {
     // Avec deux dés, un six sort dans près d'un lancer sur trois : relancer à
     // chaque fois donnerait des tours qui n'en finissent pas.

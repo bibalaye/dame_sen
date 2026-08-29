@@ -127,20 +127,38 @@ const Ludo: React.FC<LudoProps> = ({
 
   // --- Déroulement ---------------------------------------------------------
 
+  /**
+   * Joue un coup, et garde le pion sous la main s'il lui reste un dé.
+   *
+   * Le désélectionner obligeait à le retrouver et à le recliquer entre les deux
+   * dés — au point qu'on croyait ne plus pouvoir enchaîner avec le même pion
+   * après une prise. C'est pourtant le geste le plus courant : avancer de trois
+   * pour prendre, puis de cinq pour s'éloigner.
+   */
   const applyMove = useCallback((move: LudoMove) => {
-    setSelected(null);
-    setState((current) => {
-      const next = playLudoMove(current, move);
-      if (next === current) return current;
+    /*
+     * Le nouvel état se calcule ici plutôt que dans la mise à jour : jouer un
+     * son ou changer la sélection depuis l'intérieur d'un `setState` sont des
+     * effets de bord, et React se réserve le droit d'y passer deux fois.
+     */
+    const current = stateRef.current;
+    const next = playLudoMove(current, move);
+    if (next === current) return;
 
-      if (move.captures?.length) {
-        play('capture');
-        vibrate(30);
-      } else {
-        play('move');
-      }
-      return next;
-    });
+    if (move.captures?.length) {
+      play('capture');
+      vibrate(30);
+    } else {
+      play('move');
+    }
+
+    // Le pion reste choisi tant qu'il a de quoi jouer ; sinon la main se libère
+    // pour un autre.
+    const encore = legalLudoMoves(next).some((m) => m.pawn === move.pawn);
+    setSelected(encore ? move.pawn : null);
+
+    stateRef.current = next;
+    setState(next);
   }, []);
 
   const roll = useCallback(() => {
@@ -215,6 +233,14 @@ const Ludo: React.FC<LudoProps> = ({
     const propres = moves.filter((m) => m.pawn === index);
     if (propres.length === 0) return;
 
+    // Recliquer le pion choisi le relâche : c'est la seule façon de changer
+    // d'avis une fois les destinations affichées.
+    if (index === selected) {
+      play('click');
+      setSelected(null);
+      return;
+    }
+
     // Un seul coup possible : inutile de demander où aller.
     if (propres.length === 1) {
       applyMove(propres[0]);
@@ -222,7 +248,7 @@ const Ludo: React.FC<LudoProps> = ({
     }
 
     play('click');
-    setSelected(index === selected ? null : index);
+    setSelected(index);
   };
 
   const handleTarget = (spot: LudoMove['to']) => {
