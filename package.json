@@ -11,7 +11,8 @@
     "lint": "next lint",
     "test": "npm run test:unit && npm run test:sql",
     "test:unit": "node --test --experimental-strip-types src/lib/__tests__/*.test.ts",
-    "test:sql": "node --test --experimental-strip-types supabase/schema.test.mjs"
+    "test:sql": "node --test --experimental-strip-types supabase/schema.test.mjs",
+    "check:schema": "node scripts/check-schema.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

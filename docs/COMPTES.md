@@ -34,6 +34,19 @@ On peut donc le rejouer après une modification — et il **faut** le rejouer
 après chaque mise à jour de ce fichier, sans quoi le serveur garde l'ancienne
 version des fonctions.
 
+> **Coller le fichier en entier.** L'éditeur SQL exécute tout d'un bloc : une
+> seule erreur au milieu et rien ne s'applique ensuite. Le jeu ne le dira pas
+> autrement que par une panne, plus tard, à l'endroit le moins pratique.
+
+Pour vérifier ce que l'instance contient réellement :
+
+```
+npm run check:schema
+```
+
+Le script interroge la base colonne par colonne et fonction par fonction, et
+liste ce qui manque. Il n'écrit rien et n'a besoin que de la clé publique.
+
 Il installe :
 
 | Objet | Rôle |
@@ -300,3 +313,30 @@ La recherche et la liste ne rendent que ce que le classement montre déjà :
 pseudo, nom affiché, titre et cadre. Jamais un solde, jamais un identifiant de
 compte. Deux caractères au minimum pour chercher, sans quoi une seule lettre
 listerait la moitié des joueurs.
+
+---
+
+## Faire évoluer le schéma
+
+PostgreSQL refuse de « remplacer » ce dont la forme change :
+
+- `create or replace view` ne sait qu'**ajouter** des colonnes à la fin, jamais
+  en insérer au milieu ;
+- `create or replace function` refuse de **renommer un paramètre**.
+
+Les deux se sont produits en ajoutant la boutique — `title` inséré au milieu de
+la vue du classement, `p_stars` devenu `p_coins`. Rejouer le fichier sur une
+base antérieure échouait, et comme l'éditeur SQL exécute tout d'un bloc, plus
+rien ne s'appliquait ensuite.
+
+D'où la section **« Formes qui ont changé »** en tête des fonctions : tout ce
+dont la signature bouge y est supprimé avant d'être recréé.
+
+**Quand vous modifiez une signature ou l'ordre des colonnes d'une vue, ajoutez
+le `drop` correspondant dans cette section.** Trois tests le vérifient :
+
+- appliquer le fichier deux fois de suite ne change rien ;
+- il s'applique sur une base d'avant les titres et la boutique ;
+- les données d'une base antérieure survivent à la mise à jour.
+
+Retirer l'un des deux `drop` fait tomber ces tests — c'est vérifié.

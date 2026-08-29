@@ -991,3 +991,157 @@ describe('verrouillage des amitiés', () => {
     assert.deepEqual(rows, [], 'aucune ne doit être ouverte à un visiteur anonyme');
   });
 });
+
+describe('le fichier se rejoue sans casser', () => {
+  /** Une base neuve, avec seulement ce que Supabase fournit. */
+  const baseVierge = async () => {
+    const base = await PGlite.create();
+    await base.exec(SOCLE_SUPABASE);
+    return base;
+  };
+
+  const schema = () => readFileSync(join(ici, 'schema.sql'), 'utf8');
+
+  test('l’appliquer deux fois de suite ne change rien', async () => {
+    const base = await baseVierge();
+    await base.exec(schema());
+
+    // Le second passage est le cas normal : on rejoue le fichier après chaque
+    // modification, sur une base qui contient déjà la version précédente.
+    await base.exec(schema());
+
+    const { rows } = await base.query('select count(*)::int as n from public.catalog');
+    assert.equal(rows[0].n, 35, 'le catalogue ne doit pas se dédoubler');
+  });
+
+  test('il s’applique sur une base d’avant les titres et la boutique', async () => {
+    const base = await baseVierge();
+
+    /*
+     * On rejoue la forme qu'avait le schéma avant la boutique. Deux détails
+     * suffisent à le faire échouer, et tous deux se sont produits :
+     *
+     *   - la vue listait ses colonnes dans un autre ordre, et
+     *     « create or replace view » ne sait qu'en ajouter à la fin ;
+     *   - la fonction d'import prenait « p_stars », et « create or replace
+     *     function » refuse de renommer un paramètre.
+     *
+     * L'éditeur SQL exécutant tout d'un bloc, la moindre de ces erreurs
+     * empêchait le reste du fichier de s'appliquer.
+     */
+    await base.exec(`
+      create table public.profiles (
+        id uuid primary key references auth.users on delete cascade,
+        handle text not null unique,
+        display_name text not null,
+        stars integer not null default 0,
+        earned integer not null default 0,
+        unlocked text[] not null default array['cauri'],
+        piece_set text not null default 'cauri',
+        last_visit_day integer not null default 0,
+        visit_streak integer not null default 0,
+        daily_last_number integer not null default 0,
+        daily_streak integer not null default 0,
+        daily_solved_count integer not null default 0,
+        imported boolean not null default false,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+
+      create table public.games (
+        id text not null,
+        player_id uuid not null references public.profiles(id) on delete cascade,
+        game text not null,
+        mode text not null,
+        result text not null,
+        opponent text not null default '',
+        detail text,
+        played_at bigint not null,
+        primary key (player_id, id)
+      );
+
+      create view public.leaderboard as
+        select p.display_name, p.handle,
+               count(*) filter (where g.result = 'win') as wins,
+               count(*) as played, p.daily_streak
+        from public.profiles p
+        join public.games g on g.player_id = p.id
+        group by p.id, p.display_name, p.handle, p.daily_streak;
+
+      create function public.import_local_progress(p_stars integer, p_games jsonb)
+      returns jsonb language sql as $fn$ select '{}'::jsonb $fn$;
+    `);
+
+    await base.exec(schema());
+
+    const { rows: colonnes } = await base.query(`
+      select column_name from information_schema.columns
+      where table_schema = 'public' and table_name = 'profiles'
+        and column_name in ('coins', 'owned', 'board_theme', 'frame', 'title')
+      order by column_name
+    `);
+    assert.deepEqual(
+      colonnes.map((r) => r.column_name),
+      ['board_theme', 'coins', 'frame', 'owned', 'title'],
+      'toutes les colonnes de la boutique doivent être arrivées',
+    );
+
+    const { rows: cat } = await base.query('select count(*)::int as n from public.catalog');
+    assert.equal(cat[0].n, 35, 'le catalogue doit être rempli');
+
+    const { rows: fn } = await base.query(`
+      select proname from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and proname in ('buy_item', 'set_loadout', 'list_friends')
+      order by proname
+    `);
+    assert.deepEqual(
+      fn.map((r) => r.proname),
+      ['buy_item', 'list_friends', 'set_loadout'],
+      'les nouvelles fonctions doivent être créées',
+    );
+  });
+
+  test('les données d’une base antérieure survivent à la mise à jour', async () => {
+    const base = await baseVierge();
+    await base.exec(`
+      create table public.profiles (
+        id uuid primary key references auth.users on delete cascade,
+        handle text not null unique,
+        display_name text not null,
+        stars integer not null default 0,
+        earned integer not null default 0,
+        unlocked text[] not null default array['cauri'],
+        piece_set text not null default 'cauri',
+        last_visit_day integer not null default 0,
+        visit_streak integer not null default 0,
+        daily_last_number integer not null default 0,
+        daily_streak integer not null default 0,
+        daily_solved_count integer not null default 0,
+        imported boolean not null default false,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+    `);
+
+    const { rows } = await base.query(
+      "insert into auth.users (email) values ('ancien@x.app') returning id",
+    );
+    await base.query(
+      `insert into public.profiles (id, handle, display_name, stars, unlocked, piece_set)
+       values ($1, 'ancien', 'Ancien', 1234, array['cauri', 'sabar'], 'sabar')`,
+      [rows[0].id],
+    );
+
+    await base.exec(schema());
+
+    const { rows: apres } = await base.query(
+      'select coins, owned, piece_set, board_theme from public.profiles where handle = $1',
+      ['ancien'],
+    );
+    assert.equal(apres[0].coins, 1234, 'le solde survit');
+    assert.deepEqual(apres[0].owned, ['pieces:sabar'], 'l’achat garde sa famille');
+    assert.equal(apres[0].piece_set, 'sabar', 'les pions portés ne changent pas');
+    assert.equal(apres[0].board_theme, 'bois', 'le plateau prend sa valeur par défaut');
+  });
+});

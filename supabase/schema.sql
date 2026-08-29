@@ -198,6 +198,13 @@ create policy "catalogue lisible"
 
 -- Une vue n'expose que le nécessaire : pas de solde, pas d'identifiant de
 -- compte. Le titre en fait partie — c'est ce que le joueur a choisi de montrer.
+--
+-- On la supprime avant de la recréer : « create or replace view » ne sait
+-- qu'ajouter des colonnes à la fin, jamais en insérer au milieu. Sans ce drop,
+-- rejouer ce fichier sur une base installée avant les titres échoue — et comme
+-- l'éditeur SQL exécute tout d'un bloc, plus rien ne s'applique ensuite.
+drop view if exists public.leaderboard;
+
 create or replace view public.leaderboard
 with (security_invoker = off) as
   select
@@ -216,6 +223,18 @@ with (security_invoker = off) as
   limit 100;
 
 grant select on public.leaderboard to authenticated;
+
+-- --- Formes qui ont changé ---------------------------------------------------
+
+-- PostgreSQL refuse de « remplacer » ce dont la forme change : une fonction ne
+-- peut pas voir un paramètre renommé, ni une vue ses colonnes réordonnées. Il
+-- faut donc supprimer d'abord — et le faire ici, avant les créations, sans quoi
+-- rejouer ce fichier sur une base antérieure échoue au milieu. L'éditeur SQL
+-- exécutant tout d'un bloc, plus rien ne s'appliquerait ensuite.
+drop function if exists public.import_local_progress(integer, jsonb);
+drop function if exists public.unlock_piece_set(text);
+drop function if exists public.set_piece_set(text);
+drop function if exists public.piece_set_price(text);
 
 -- --- Barème (miroir de src/lib/economy.ts) -----------------------------------
 
@@ -659,11 +678,6 @@ end;
 $$;
 
 -- --- Droits ------------------------------------------------------------------
-
--- Les anciennes fonctions, remplacées par buy_item et set_loadout.
-drop function if exists public.unlock_piece_set(text);
-drop function if exists public.set_piece_set(text);
-drop function if exists public.piece_set_price(text);
 
 revoke all on function public.create_profile(text, text) from public, anon;
 revoke all on function public.claim_daily_visit() from public, anon;
