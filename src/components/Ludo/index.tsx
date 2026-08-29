@@ -35,13 +35,12 @@ import {
   LUDO_COLORS,
   LUDO_NAMES,
   TRACK_CELLS,
-  finishedCell,
   homeCells,
   stableArea,
-  stableCells,
   startOwner,
   type Cell,
 } from '@/lib/ludoBoard';
+import { getMovePath, cellOfPawn } from '@/lib/ludoAnimation';
 import styles from './Ludo.module.css';
 
 interface LudoProps {
@@ -57,16 +56,6 @@ interface LudoProps {
 /** Le joueur qui tient l'appareil en solo. */
 const HUMAN: LudoPlayerId = 0;
 
-/** Temps de réflexion affiché pour l'adversaire, en millisecondes. */
-const AI_DELAY = 620;
-/** Le temps de voir les dés avant que la partie ne reprenne. */
-const ROLL_PAUSE = 480;
-/**
- * Attente avant un coup joué d'office. Assez pour suivre le pion des yeux,
- * assez court pour ne pas donner l'impression d'attendre.
- */
-const AUTO_DELAY = 400;
-
 const PAWN_IMAGE: Readonly<Record<LudoPlayerId, string>> = {
   0: '/assets/pieces/pawn-red.png',
   1: '/assets/pieces/pawn-green.png',
@@ -74,29 +63,13 @@ const PAWN_IMAGE: Readonly<Record<LudoPlayerId, string>> = {
   3: '/assets/pieces/pawn-yellow.png',
 };
 
-/** Où se dessine un pion, selon l'endroit où il se trouve. */
-const cellOf = (state: LudoState, index: number): Cell => {
-  const pawn = state.pawns[index];
-  const spot = pawn.spot;
-
-  if (spot.zone === 'track') return TRACK_CELLS[spot.square];
-  if (spot.zone === 'home') return homeCells(spot.host)[spot.step];
-  if (spot.zone === 'finished') {
-    const avant = state.pawns
-      .slice(0, index)
-      .filter((p) => p.owner === pawn.owner && p.spot.zone === 'finished').length;
-    return finishedCell(pawn.owner, avant);
-  }
-
-  // À l'écurie : chaque pion prend une place, chez son propriétaire ou chez son
-  // ravisseur. On compte ceux qui l'y ont précédé pour ne pas les superposer.
-  const places = stableCells(spot.host);
-  const rang = state.pawns
-    .slice(0, index)
-    .filter((p) => p.spot.zone === 'stable' && p.spot.host === spot.host).length;
-
-  return places[Math.min(rang, places.length - 1)];
-};
+interface AnimatingPawn {
+  pawnIndex: number;
+  owner: LudoPlayerId;
+  path: Cell[];
+  stepIndex: number;
+  move: LudoMove;
+}
 
 const Ludo: React.FC<LudoProps> = ({
   mode,
@@ -106,24 +79,31 @@ const Ludo: React.FC<LudoProps> = ({
   onFinish,
 }) => {
   const [state, setState] = useState<LudoState>(() => createLudoGame(playerCount));
-  /** Les coins occupés : à deux, on s'assoit en diagonale. */
-  const sieges = seatsFor(playerCount);
+  const sieges = useMemo(() => seatsFor(playerCount), [playerCount]);
   const [selected, setSelected] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState<string>('Bonne partie ! Touchez pour lancer.');
+  const [isHighlightAnnouncement, setIsHighlightAnnouncement] = useState(false);
   const [rolling, setRolling] = useState(false);
+  const [rollingDiceValues, setRollingDiceValues] = useState<[number, number]>([1, 1]);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [speed, setSpeed] = useState<1 | 1.5>(1);
+  const [captureBurstCell, setCaptureBurstCell] = useState<Cell | null>(null);
+
+  // Animation pas-à-pas
+  const [animatingPawn, setAnimatingPawn] = useState<AnimatingPawn | null>(null);
 
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const finished = state.status.kind !== 'playing';
+  const isAnimatingRef = useRef(false);
+  isAnimatingRef.current = animatingPawn !== null;
 
-  /** À deux sur un appareil, chacun joue son tour ; en solo, seul le rouge. */
+  const finished = state.status.kind !== 'playing';
   const isHuman = mode === 'pass' || state.current === HUMAN;
 
   const moves = useMemo(() => legalLudoMoves(state), [state]);
 
-  /** Les coups du pion choisi : c'est ce qu'on met en évidence sur le plateau. */
   const movesForSelected = useMemo(
     () => (selected === null ? [] : moves.filter((m) => m.pawn === selected)),
     [moves, selected],
@@ -134,17 +114,14 @@ const Ludo: React.FC<LudoProps> = ({
     [moves],
   );
 
-  /**
-   * Le coup à jouer d'office, s'il n'y a rien à décider.
-   *
-   * Deux cas : un seul coup possible, ou un seul pion concerné. Quand un unique
-   * pion est en course, choisir entre ses dés n'est pas une décision — c'est un
-   * clic de plus. On prend alors le meilleur enchaînement, qui sait entrer dans
-   * l'allée quand le compte y tombe juste.
-   *
-   * Dès que deux pions peuvent jouer, la main revient au joueur : là, il y a un
-   * vrai choix.
-   */
+  // Timing constants ajustés par la vitesse
+  const HOP_INTERVAL = speed === 1.5 ? 110 : 160;
+  const AI_THINK_DELAY = speed === 1.5 ? 450 : 700;
+  const AUTO_DELAY = speed === 1.5 ? 350 : 550;
+  const TURN_END_DELAY = speed === 1.5 ? 400 : 650;
+  const ROLL_DURATION = speed === 1.5 ? 450 : 650;
+
+  // Calcul du coup évident
   const coupEvident = useMemo(() => {
     if (moves.length === 0) return null;
     if (moves.length === 1) return moves[0];
@@ -155,116 +132,189 @@ const Ludo: React.FC<LudoProps> = ({
     return chooseLudoMove(state, 'hard');
   }, [moves, state]);
 
-  // --- Déroulement ---------------------------------------------------------
+  // --- Exécution d'un coup avec animation fluide pas-à-pas -------------------
 
-  /**
-   * Joue un coup, et garde le pion sous la main s'il lui reste un dé.
-   *
-   * Le désélectionner obligeait à le retrouver et à le recliquer entre les deux
-   * dés — au point qu'on croyait ne plus pouvoir enchaîner avec le même pion
-   * après une prise. C'est pourtant le geste le plus courant : avancer de trois
-   * pour prendre, puis de cinq pour s'éloigner.
-   */
-  const applyMove = useCallback((move: LudoMove) => {
-    /*
-     * Le nouvel état se calcule ici plutôt que dans la mise à jour : jouer un
-     * son ou changer la sélection depuis l'intérieur d'un `setState` sont des
-     * effets de bord, et React se réserve le droit d'y passer deux fois.
-     */
+  const finalizeMove = useCallback((move: LudoMove) => {
     const current = stateRef.current;
     const next = playLudoMove(current, move);
-    if (next === current) return;
+    if (next === current) {
+      setAnimatingPawn(null);
+      return;
+    }
+
+    const mover = current.pawns[move.pawn];
+    const moverName = LUDO_NAMES[mover.owner];
 
     if (move.captures?.length) {
       play('capture');
-      vibrate(30);
+      vibrate([40, 30, 40]);
+      const captured = current.pawns[move.captures[0]];
+      const capturedName = LUDO_NAMES[captured.owner];
+      setAnnouncement(`💥 ${moverName} capture le pion de ${capturedName} !`);
+      setIsHighlightAnnouncement(true);
+
+      const targetCell = cellOfPawn(current, move.pawn);
+      setCaptureBurstCell(targetCell);
+      setTimeout(() => setCaptureBurstCell(null), 500);
+    } else if (move.to.zone === 'finished') {
+      play('win');
+      setAnnouncement(`👑 ${moverName} rentre un pion au centre !`);
+      setIsHighlightAnnouncement(true);
     } else {
       play('move');
     }
 
-    // Le pion reste choisi tant qu'il a de quoi jouer ; sinon la main se libère
-    // pour un autre.
     const encore = legalLudoMoves(next).some((m) => m.pawn === move.pawn);
     setSelected(encore ? move.pawn : null);
 
     stateRef.current = next;
     setState(next);
+    setAnimatingPawn(null);
   }, []);
 
+  const executeMove = useCallback((move: LudoMove) => {
+    if (isAnimatingRef.current) return;
+
+    const current = stateRef.current;
+    const path = getMovePath(current, move);
+
+    if (path.length <= 1) {
+      finalizeMove(move);
+      return;
+    }
+
+    const mover = current.pawns[move.pawn];
+    setAnimatingPawn({
+      pawnIndex: move.pawn,
+      owner: mover.owner,
+      path,
+      stepIndex: 0,
+      move,
+    });
+  }, [finalizeMove]);
+
+  // Horloge de saut pas-à-pas pour l'animation
+  useEffect(() => {
+    if (!animatingPawn) return;
+
+    if (animatingPawn.stepIndex < animatingPawn.path.length - 1) {
+      const timer = setTimeout(() => {
+        play('move', animatingPawn.stepIndex);
+        setAnimatingPawn((prev) => {
+          if (!prev) return null;
+          return { ...prev, stepIndex: prev.stepIndex + 1 };
+        });
+      }, HOP_INTERVAL);
+      return () => clearTimeout(timer);
+    } else {
+      // Arrivée sur la case finale
+      const timer = setTimeout(() => {
+        finalizeMove(animatingPawn.move);
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [animatingPawn, HOP_INTERVAL, finalizeMove]);
+
+  // --- Lancer de dés --------------------------------------------------------
+
   const roll = useCallback(() => {
-    if (rolling) return;
+    if (rolling || isAnimatingRef.current || finished) return;
     setRolling(true);
     setNotice(null);
     play('select');
+    setAnnouncement(`🎲 Lancer des dés en cours...`);
+    setIsHighlightAnnouncement(false);
+
+    // Roulement animé des dés
+    const interval = setInterval(() => {
+      setRollingDiceValues([
+        1 + Math.floor(Math.random() * 6),
+        1 + Math.floor(Math.random() * 6),
+      ]);
+    }, 60);
 
     setTimeout(() => {
-      setState((current) => rollInto(current, rollDice()));
+      clearInterval(interval);
+      const newDice = rollDice();
+      const current = stateRef.current;
+      const next = rollInto(current, newDice);
+      stateRef.current = next;
+      setState(next);
       setRolling(false);
-    }, ROLL_PAUSE);
-  }, [rolling]);
 
-  /*
-   * Fin de tour : le moteur seul en décide. Le composant s'en remettait à
-   * `dice.length`, ce qui ne distinguait pas « pas encore lancé » de « tout
-   * joué » — et le joueur qui sortait le premier gardait la main indéfiniment.
-   */
+      const isDouble = newDice[0] === 6 && newDice[1] === 6;
+      const playerName = isHuman && current.current === HUMAN ? 'Vous' : LUDO_NAMES[current.current];
+
+      if (isDouble) {
+        play('promote');
+        vibrate([50, 40, 50]);
+        setAnnouncement(`⚡ DOUBLE SIX ! ${playerName} rejoue !`);
+        setIsHighlightAnnouncement(true);
+      } else {
+        play('click');
+        setAnnouncement(`🎲 ${playerName} a fait ${newDice[0]} et ${newDice[1]}`);
+        setIsHighlightAnnouncement(false);
+      }
+    }, ROLL_DURATION);
+  }, [rolling, finished, isHuman, ROLL_DURATION]);
+
   const tourFini = turnIsOver(state);
+  const peutLancer = isHuman && !finished && !rolling && !animatingPawn && state.rolled.length === 0;
 
-  /** Vrai quand le joueur n'a plus qu'à lancer. */
-  const peutLancer = isHuman && !finished && !rolling && state.rolled.length === 0;
-
+  // Fin de tour et passage au joueur suivant
   useEffect(() => {
-    if (finished || rolling || !tourFini) return;
+    if (finished || rolling || animatingPawn || !tourFini) return;
 
     const relance = earnsExtraRoll(state.rolled, state.extraRolls);
     const timer = setTimeout(() => {
-      setNotice(relance ? 'Six : vous rejouez.' : null);
+      if (relance) {
+        setNotice('Double-six : vous rejouez !');
+        setAnnouncement(`⚡ Relance pour ${LUDO_NAMES[state.current]} !`);
+      } else {
+        setNotice(null);
+      }
       setState((current) => endTurn(current, relance));
-    }, moves.length === 0 ? 700 : 420);
+    }, moves.length === 0 ? TURN_END_DELAY + 200 : TURN_END_DELAY);
 
     return () => clearTimeout(timer);
-  }, [tourFini, state.rolled, state.extraRolls, moves.length, finished, rolling]);
+  }, [tourFini, state, moves.length, finished, rolling, animatingPawn, TURN_END_DELAY]);
 
-  /**
-   * Le coup sans alternative se joue seul.
-   *
-   * Faire cliquer quelqu'un sur l'unique case où son unique pion peut aller
-   * n'est pas de l'interaction, c'est une formalité. On la lui épargne, sans
-   * jamais lui retirer un choix : dès que deux pions sont jouables, le jeu
-   * attend.
-   */
+  // Coup évident automatique pour le joueur humain
   useEffect(() => {
-    if (finished || rolling || tourFini) return;
+    if (finished || rolling || tourFini || animatingPawn) return;
     if (!isHuman || !coupEvident) return;
 
-    const timer = setTimeout(() => applyMove(coupEvident), AUTO_DELAY);
+    const timer = setTimeout(() => {
+      executeMove(coupEvident);
+    }, AUTO_DELAY);
     return () => clearTimeout(timer);
-  }, [coupEvident, isHuman, finished, rolling, tourFini, applyMove]);
+  }, [coupEvident, isHuman, finished, rolling, tourFini, animatingPawn, executeMove, AUTO_DELAY]);
 
-  /**
-   * L'adversaire lance puis joue ; la fin de son tour est réglée par l'effet
-   * ci-dessus, comme pour un joueur humain. Deux chemins pour la même règle
-   * finiraient par diverger.
-   */
+  // Intelligence Artificielle (Déroulement rythmé et naturel)
   useEffect(() => {
-    if (finished || isHuman || rolling || tourFini) return;
+    if (finished || isHuman || rolling || tourFini || animatingPawn) return;
 
     const timer = setTimeout(() => {
       const current = stateRef.current;
 
       if (current.rolled.length === 0) {
-        setState(rollInto(current, rollDice()));
+        roll();
         return;
       }
 
       const choix = chooseLudoMove(current, difficulty);
-      if (choix) applyMove(choix);
-    }, AI_DELAY);
+      if (choix) {
+        setSelected(choix.pawn);
+        setTimeout(() => {
+          executeMove(choix);
+        }, 220);
+      }
+    }, AI_THINK_DELAY);
 
     return () => clearTimeout(timer);
-  }, [state, finished, isHuman, rolling, tourFini, difficulty, applyMove]);
+  }, [state, finished, isHuman, rolling, tourFini, animatingPawn, difficulty, executeMove, roll, AI_THINK_DELAY]);
 
-  // La partie terminée se signale une seule fois.
+  // Fin de partie
   const reported = useRef(false);
   useEffect(() => {
     if (!finished || reported.current) return;
@@ -277,14 +327,12 @@ const Ludo: React.FC<LudoProps> = ({
   // --- Interaction ---------------------------------------------------------
 
   const handlePawn = (index: number) => {
-    if (!isHuman || finished) return;
+    if (!isHuman || finished || animatingPawn || rolling) return;
 
-    // La décision vit dans `ludoTap` : elle s'était trompée deux fois enfouie
-    // dans ce gestionnaire, où rien ne la vérifiait.
     const issue = resolvePawnTap(moves, selected, index);
 
     if (issue.kind === 'play') {
-      applyMove(issue.move);
+      executeMove(issue.move);
     } else if (issue.kind === 'select') {
       play('click');
       setSelected(issue.pawn);
@@ -295,22 +343,40 @@ const Ludo: React.FC<LudoProps> = ({
   };
 
   const handleTarget = (spot: LudoMove['to']) => {
+    if (animatingPawn || rolling) return;
     const move = movesForSelected.find((m) => sameSpot(m.to, spot));
-    if (move) applyMove(move);
+    if (move) executeMove(move);
   };
 
-  // --- Rendu ----------------------------------------------------------------
+  // --- Rendu & Trajectoires -------------------------------------------------
 
-  /** Les cases mises en évidence pour le pion choisi. */
-  const targets = movesForSelected.map((m) => ({
-    cell:
-      m.to.zone === 'track'
-        ? TRACK_CELLS[m.to.square]
-        : m.to.zone === 'home'
-          ? homeCells(m.to.host)[m.to.step]
-          : CENTER,
-    spot: m.to,
-  }));
+  const targets = useMemo(
+    () =>
+      movesForSelected.map((m) => ({
+        cell:
+          m.to.zone === 'track'
+            ? TRACK_CELLS[m.to.square]
+            : m.to.zone === 'home'
+              ? homeCells(m.to.host)[m.to.step]
+              : CENTER,
+        spot: m.to,
+      })),
+    [movesForSelected],
+  );
+
+  // Ensemble des cases de la trajectoire pour le pion choisi
+  const pathCellsSet = useMemo(() => {
+    const set = new Set<string>();
+    if (selected !== null) {
+      for (const move of movesForSelected) {
+        const path = getMovePath(state, move);
+        for (let i = 1; i < path.length - 1; i++) {
+          set.add(`${path[i].row},${path[i].col}`);
+        }
+      }
+    }
+    return set;
+  }, [selected, movesForSelected, state]);
 
   const cases: React.ReactNode[] = [];
   for (let row = 0; row < GRID; row++) {
@@ -324,13 +390,17 @@ const Ludo: React.FC<LudoProps> = ({
 
       const cible = targets.find((t) => t.cell.row === row && t.cell.col === col);
       const centre = row === CENTER.row && col === CENTER.col;
+      const isPath = pathCellsSet.has(`${row},${col}`);
+      const isStart = proprietaire !== null;
 
       const classes = [
         styles.cell,
         square !== -1 ? styles.track : '',
+        isStart ? styles.startGate : '',
         allee !== undefined ? styles.lane : '',
         centre ? styles.center : '',
         cible ? styles.target : '',
+        isPath ? styles.pathDot : '',
       ]
         .filter(Boolean)
         .join(' ');
@@ -348,54 +418,76 @@ const Ludo: React.FC<LudoProps> = ({
             key={`${row}-${col}`}
             type="button"
             className={classes}
-            style={{ gridRow: row + 1, gridColumn: col + 1, background: teinte }}
+            style={{
+              gridRow: row + 1,
+              gridColumn: col + 1,
+              background: teinte ? `color-mix(in srgb, ${teinte} 35%, var(--surface))` : undefined,
+              color: teinte,
+            }}
             onClick={() => handleTarget(cible.spot)}
             aria-label={
               cible.spot.zone === 'track' && pawnsOnSquare(state, cible.spot.square).length
-                ? 'Attraper ici'
-                : 'Jouer ici'
+                ? 'Prendre le pion ici'
+                : 'Avancer ici'
             }
           />
         ) : (
           <div
             key={`${row}-${col}`}
             className={classes}
-            style={{ gridRow: row + 1, gridColumn: col + 1, background: teinte }}
+            style={{
+              gridRow: row + 1,
+              gridColumn: col + 1,
+              background: teinte ? `color-mix(in srgb, ${teinte} 25%, var(--surface))` : undefined,
+              color: teinte,
+            }}
           />
         ),
       );
     }
   }
 
-  /** Les pions, groupés par case pour gérer les empilements. */
+  // Regroupement des pions par case (en masquant temporairement le pion en cours de vol)
   const parCase = new Map<string, number[]>();
   state.pawns.forEach((_, index) => {
-    const cell = cellOf(state, index);
+    if (animatingPawn && animatingPawn.pawnIndex === index) return;
+    const cell = cellOfPawn(state, index);
     const cle = `${cell.row},${cell.col}`;
     parCase.set(cle, [...(parCase.get(cle) ?? []), index]);
   });
 
   return (
     <div className={styles.screen}>
+      {/* --- En-tête --- */}
       <header className={styles.top}>
-        <button type="button" className={`uiRound ${styles.back}`} onClick={onExit}>
+        <button
+          type="button"
+          className={`uiRound ${styles.actionBtn}`}
+          onClick={onExit}
+          aria-label="Quitter"
+        >
           ✕
         </button>
 
-        {/* Ces règles ne se devinent pas : un pion pris change de camp
-            d'écurie, empiler expose au lieu de protéger. Elles doivent rester
-            à portée pendant la partie, pas seulement avant. */}
         <button
           type="button"
-          className={`uiRound ${styles.back}`}
+          className={`uiRound ${styles.actionBtn}`}
           onClick={() => setRulesOpen(true)}
           aria-label="Règles du jeu"
         >
           ?
         </button>
 
-        {/* Chaque camp, son avancement, et qui a la main : on voit d'un coup
-            d'œil qui est près de gagner sans compter les pions sur le plateau. */}
+        <button
+          type="button"
+          className={`uiRound ${styles.speedBtn}`}
+          onClick={() => setSpeed((s) => (s === 1 ? 1.5 : 1))}
+          aria-label="Vitesse d'animation"
+          title={`Vitesse actuelle : ${speed}x`}
+        >
+          {speed === 1 ? '⚡ 1x' : '⚡ 1.5x'}
+        </button>
+
         <ul className={styles.players}>
           {sieges.map((player) => {
             const rentres = state.pawns.filter(
@@ -411,35 +503,54 @@ const Ludo: React.FC<LudoProps> = ({
                 className={`${styles.player} ${
                   state.current === player ? styles.playerOn : ''
                 }`}
-                style={{ borderColor: LUDO_COLORS[player] }}
+                style={{
+                  borderColor: LUDO_COLORS[player],
+                  ['--player-glow' as string]: LUDO_COLORS[player],
+                }}
               >
                 <span
                   className={styles.dot}
-                  style={{ background: LUDO_COLORS[player] }}
+                  style={{ background: LUDO_COLORS[player], color: LUDO_COLORS[player] }}
                   aria-hidden="true"
                 />
                 <span className={styles.playerName}>
                   {mode === 'solo' && player === HUMAN ? 'Vous' : LUDO_NAMES[player]}
                 </span>
-                <span className={styles.playerScore}>
-                  {rentres}/{PIECES_PER_PLAYER}
+                <div className={styles.playerStats}>
+                  <div className={styles.finishedIcons}>
+                    {Array.from({ length: PIECES_PER_PLAYER }).map((_, i) => (
+                      <span
+                        key={i}
+                        className={i < rentres ? styles.starFilled : styles.starEmpty}
+                      >
+                        ★
+                      </span>
+                    ))}
+                  </div>
                   {captifs > 0 && (
                     <span className={styles.captives} title="pions prisonniers">
                       ⛓{captifs}
                     </span>
                   )}
-                </span>
+                </div>
               </li>
             );
           })}
         </ul>
       </header>
 
-      {/*
-        Tout le plateau lance les dés quand c'est le moment : viser un bouton de
-        cinquante pixels en bas d'écran à chaque tour est le geste qui fatigue
-        le plus dans ce jeu.
-      */}
+      {/* --- Bannière de notification stylée --- */}
+      <div className={styles.announcementBox}>
+        <div
+          className={`${styles.announcement} ${
+            isHighlightAnnouncement ? styles.announcementHighlight : ''
+          }`}
+        >
+          {announcement}
+        </div>
+      </div>
+
+      {/* --- Plateau de jeu --- */}
       <div
         className={styles.boardWrapper}
         onClick={peutLancer ? roll : undefined}
@@ -451,12 +562,7 @@ const Ludo: React.FC<LudoProps> = ({
         }}
       >
         <div className={styles.board}>
-          {/*
-            Les quatre camps sont dessinés même quand deux joueurs seulement
-            s'affrontent : un plateau amputé de ses coins ne ressemble plus à un
-            plateau. Les camps inoccupés sont simplement plus pâles, et n'ont
-            pas de pions.
-          */}
+          {/* Écuries des 4 camps */}
           {LUDO_PLAYERS.map((player) => {
             const area = stableArea(player);
             const assis = sieges.includes(player);
@@ -470,8 +576,8 @@ const Ludo: React.FC<LudoProps> = ({
                   gridColumn: `${area.col + 1} / span ${area.size}`,
                   borderColor: LUDO_COLORS[player],
                   background: `color-mix(in srgb, ${LUDO_COLORS[player]} ${
-                    assis ? 18 : 7
-                  }%, var(--surface))`,
+                    assis ? 22 : 8
+                  }%, rgba(20, 12, 6, 0.95))`,
                 }}
               />
             );
@@ -479,21 +585,43 @@ const Ludo: React.FC<LudoProps> = ({
 
           {cases}
 
-          {/* Les pions, par-dessus */}
+          {/* Calque du pion en plein saut animé (Hop & Bounce) */}
+          {animatingPawn && (
+            <div className={styles.animatingPawnLayer}>
+              <div
+                key="active-animated-pawn"
+                className={styles.animatingPawn}
+                style={{
+                  gridRow: animatingPawn.path[animatingPawn.stepIndex].row + 1,
+                  gridColumn: animatingPawn.path[animatingPawn.stepIndex].col + 1,
+                }}
+              >
+                <Image
+                  src={PAWN_IMAGE[animatingPawn.owner]}
+                  width={46}
+                  height={46}
+                  alt="Pion en mouvement"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Onde de choc lors d'une capture */}
+          {captureBurstCell && (
+            <div
+              className={styles.captureBurst}
+              style={{
+                gridRow: captureBurstCell.row + 1,
+                gridColumn: captureBurstCell.col + 1,
+              }}
+            />
+          )}
+
+          {/* Pions posés sur le plateau */}
           {[...parCase.entries()].map(([cle, indices]) => {
             const [row, col] = cle.split(',').map(Number);
             const premier = indices[0];
-
-            /*
-              Une case d'arrivée laisse passer le clic jusqu'à elle, même si des
-              pions l'occupent : c'est là qu'on veut aller prendre. Partout
-              ailleurs, les pions jouables restent touchables — sans quoi il
-              faudrait relâcher le pion choisi avant d'en désigner un autre, et
-              chaque changement d'avis coûterait deux gestes.
-            */
-            const surCible = targets.some(
-              (t) => t.cell.row === row && t.cell.col === col,
-            );
+            const surCible = targets.some((t) => t.cell.row === row && t.cell.col === col);
 
             return (
               <div
@@ -503,7 +631,9 @@ const Ludo: React.FC<LudoProps> = ({
               >
                 {indices.slice(0, 2).map((index, rang) => {
                   const pawn: Pawn = state.pawns[index];
-                  const jouable = playablePawns.has(index) && isHuman;
+                  const jouable = playablePawns.has(index) && isHuman && !animatingPawn;
+                  const isSelectedPawn = selected === index;
+                  const captive = isCaptive(pawn);
 
                   return (
                     <button
@@ -512,38 +642,41 @@ const Ludo: React.FC<LudoProps> = ({
                       className={[
                         styles.pawn,
                         jouable ? styles.playable : '',
-                        selected === index ? styles.selected : '',
-                        isCaptive(pawn) ? styles.captive : '',
+                        isSelectedPawn ? styles.selected : '',
+                        captive ? styles.captive : '',
                       ]
                         .filter(Boolean)
                         .join(' ')}
-                      style={{ transform: `translate(${rang * 5}px, ${rang * -5}px)` }}
+                      style={{
+                        transform: `translate(${rang * 6}px, ${rang * -6}px)`,
+                      }}
                       onClick={() => handlePawn(index)}
                       disabled={!jouable}
                       aria-label={`Pion ${LUDO_NAMES[pawn.owner]}`}
                     >
-                      <Image src={PAWN_IMAGE[pawn.owner]} width={40} height={40} alt="" />
+                      <Image src={PAWN_IMAGE[pawn.owner]} width={42} height={42} alt="" />
+                      {captive && (
+                        <span className={styles.captiveBadge} aria-label="prisonnier">
+                          ⛓
+                        </span>
+                      )}
                     </button>
                   );
                 })}
 
                 {indices.length > 2 && (
                   <span className={styles.stack} aria-hidden="true">
-                    {indices.length}
+                    +{indices.length - 1}
                   </span>
                 )}
-                {/*
-                  Le liseré ne marque qu'un vrai barrage — à la porte de son
-                  propriétaire. Ailleurs, deux pions empilés ne protègent rien :
-                  les signaler pareillement laisserait croire le contraire.
-                */}
+
+                {/* Barrage fortifié à la porte de départ */}
                 {state.pawns[premier].spot.zone === 'track' &&
                   blockadeOwner(state, state.pawns[premier].spot.square) !== null && (
                     <span className={styles.blockade} aria-hidden="true" />
                   )}
 
-                {/* Deux pions hors de leur porte partent ensemble si on les
-                    prend : le danger doit se voir. */}
+                {/* Pions empilés exposés hors de la porte */}
                 {indices.length >= 2 &&
                   state.pawns[premier].spot.zone === 'track' &&
                   blockadeOwner(state, state.pawns[premier].spot.square) === null && (
@@ -555,29 +688,43 @@ const Ludo: React.FC<LudoProps> = ({
         </div>
       </div>
 
+      {/* --- Dés & Commandes en bas --- */}
       <footer className={styles.bottom}>
-        <div className={styles.dice}>
-          {state.rolled.length === 0 ? (
+        <div className={styles.diceContainer}>
+          {state.rolled.length === 0 && !rolling ? (
             <button
               type="button"
-              className={`uiButton ${styles.roll}`}
+              className={`uiButton ${styles.rollBtn}`}
               onClick={roll}
-              disabled={!isHuman || finished || rolling}
+              disabled={!isHuman || finished || rolling || animatingPawn !== null}
             >
-              {rolling ? '…' : 'Lancer les dés'}
+              <span className={styles.diceIcon}>🎲</span> Lancer les dés
             </button>
           ) : (
-            state.dice.map((die, i) => (
-              <span key={i} className={styles.die}>
-                <Image src={`/assets/dice/die-${die}.png`} width={46} height={46} alt={`${die}`} />
-              </span>
-            ))
+            (rolling ? rollingDiceValues : state.rolled).map((die, i) => {
+              const isUsed = !rolling && !state.dice.includes(die);
+              return (
+                <span
+                  key={i}
+                  className={`${styles.die} ${rolling ? styles.dieRolling : ''} ${
+                    isUsed ? styles.dieUsed : styles.dieActive
+                  }`}
+                >
+                  <Image
+                    src={`/assets/dice/die-${die}.png`}
+                    width={48}
+                    height={48}
+                    alt={`Dé ${die}`}
+                  />
+                </span>
+              );
+            })
           )}
         </div>
 
         {notice && <p className={styles.notice}>{notice}</p>}
 
-        {peutLancer && <p className={styles.hint}>Touchez le plateau pour lancer.</p>}
+        {peutLancer && <p className={styles.hint}>Touchez le plateau ou le bouton pour lancer.</p>}
 
         {state.rolled.length > 0 &&
           isHuman &&
@@ -586,24 +733,26 @@ const Ludo: React.FC<LudoProps> = ({
           !coupEvident && (
             <p className={styles.hint}>
               {selected === null
-                ? `${playablePawns.size} pions peuvent jouer — touchez le vôtre.`
-                : 'Touchez la case d’arrivée.'}
+                ? `${playablePawns.size} pions prêts — touchez le pion à déplacer.`
+                : 'Touchez la case d’arrivée lumineuse 🎯'}
             </p>
           )}
       </footer>
 
       {rulesOpen && <LudoRules onClose={() => setRulesOpen(false)} />}
 
+      {/* --- Modale Fin de Partie --- */}
       {finished && state.status.kind === 'win' && (
         <Modal variant="center" dismissible={false} onClose={onExit}>
           <div className={styles.over}>
+            <div className={styles.overCrown}>👑</div>
             <h2>
               {state.status.winner === HUMAN
-                ? 'Vous gagnez !'
-                : `${LUDO_NAMES[state.status.winner]} l’emporte`}
+                ? 'Victoire Royale !'
+                : `${LUDO_NAMES[state.status.winner]} l’emporte !`}
             </h2>
             <button type="button" className={`uiButton ${styles.again}`} onClick={onExit}>
-              Retour
+              Rejouer
             </button>
           </div>
         </Modal>

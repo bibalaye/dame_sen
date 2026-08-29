@@ -1,21 +1,24 @@
 /*
- * Le Ludo.
+ * Le Ludo - Design & Animations Somptueuses
  *
- * Le plateau est une grille de quinze sur quinze : les cases, les écuries et
- * les pions s'y placent tous par `grid-row` et `grid-column`, à partir des
- * coordonnées calculées dans `ludoBoard.ts`. Aucun positionnement absolu — la
- * grille suffit, et le plateau reste carré à toutes les tailles.
+ * Grille 15x15 avec effets de texture bois noble, dorures en laiton,
+ * animations 3D de dés, trajectoires lumineuses, sauts de pions dynamiques,
+ * impacts de capture et podium central festif.
  */
 
 .screen {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom);
+  justify-content: space-between;
+  gap: 8px;
+  padding: max(10px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
   background:
-    radial-gradient(120% 60% at 50% 0%, rgba(201, 146, 46, 0.18), transparent 65%),
-    linear-gradient(170deg, #3a2712 0%, #2a1c0e 55%, #1d1309 100%);
+    radial-gradient(130% 70% at 50% 0%, rgba(201, 146, 46, 0.22), transparent 70%),
+    radial-gradient(100% 60% at 50% 100%, rgba(35, 74, 125, 0.18), transparent 75%),
+    linear-gradient(175deg, #2e1d0d 0%, #1e1308 60%, #120b04 100%);
+  user-select: none;
+  overflow-x: hidden;
 }
 
 /* --- En-tête ---------------------------------------------------------------- */
@@ -23,25 +26,39 @@
 .top {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-top: 10px;
+  gap: 8px;
+  padding-top: 4px;
 }
 
-.back {
-  width: 40px;
-  height: 40px;
+.actionBtn {
+  width: 38px;
+  height: 38px;
   flex: 0 0 auto;
-  font-size: 1rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
 }
 
-/* --- Les camps -------------------------------------------------------------- */
+.speedBtn {
+  width: 44px;
+  height: 38px;
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 800;
+  font-family: var(--font-display);
+  letter-spacing: -0.5px;
+}
+
+/* --- Les camps / Joueurs --------------------------------------------------- */
 
 .players {
   display: flex;
   gap: 6px;
   flex: 1;
   margin: 0;
-  padding: 0;
+  padding: 2px 0;
   list-style: none;
   overflow-x: auto;
   scrollbar-width: none;
@@ -54,60 +71,124 @@
 .player {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
-  padding: 6px 9px;
+  padding: 6px 10px;
   border: 2px solid;
   border-radius: 50px;
-  background: var(--surface);
+  background: rgba(30, 20, 12, 0.85);
+  backdrop-filter: blur(8px);
   color: var(--text);
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   font-weight: 800;
   white-space: nowrap;
-  /* Un camp qui n'a pas la main s'efface : on cherche à qui c'est le tour, pas
-     la liste des présents. */
-  opacity: 0.5;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  opacity: 0.45;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: all 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
 .playerOn {
   opacity: 1;
-  transform: scale(1.04);
-  box-shadow: var(--shadow-soft);
-}
-
-.playerName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.playerScore {
-  margin-left: auto;
-  color: var(--text-soft);
-  font-size: 0.68rem;
-}
-
-/* Un pion prisonnier se compte : c'est ce qu'il faut deux six pour récupérer. */
-.captives {
-  margin-left: 3px;
-  color: var(--red);
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 0 16px var(--player-glow, rgba(201, 146, 46, 0.45)), 0 6px 16px rgba(0, 0, 0, 0.5);
+  border-width: 2.5px;
+  background: rgba(45, 30, 18, 0.95);
 }
 
 .dot {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.5), 0 0 6px currentColor;
+  flex-shrink: 0;
 }
 
-/* --- Plateau ---------------------------------------------------------------- */
+.playerName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 800;
+}
+
+.playerStats {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-soft);
+}
+
+.finishedIcons {
+  display: flex;
+  gap: 2px;
+}
+
+.starFilled {
+  color: #ffd700;
+  text-shadow: 0 0 4px rgba(255, 215, 0, 0.6);
+  font-size: 0.75rem;
+}
+
+.starEmpty {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 0.75rem;
+}
+
+.captives {
+  color: #ff5555;
+  background: rgba(255, 0, 0, 0.15);
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-weight: 800;
+}
+
+/* --- Bannière de notification & statut de jeu ------------------------------- */
+
+.announcementBox {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.announcement {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border-radius: 20px;
+  background: rgba(20, 12, 5, 0.85);
+  border: 1px solid rgba(201, 146, 46, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  color: #f7eed7;
+  font-size: 0.82rem;
+  font-weight: 700;
+  animation: popBanner 0.25s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+.announcementHighlight {
+  border-color: var(--brass);
+  background: linear-gradient(135deg, rgba(70, 48, 18, 0.95), rgba(40, 25, 10, 0.95));
+  color: #ffea9f;
+  box-shadow: 0 0 14px rgba(201, 146, 46, 0.5);
+}
+
+@keyframes popBanner {
+  0% { transform: translateY(-6px) scale(0.92); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* --- Plateau de jeu --------------------------------------------------------- */
 
 .boardWrapper {
   flex: 1;
   display: grid;
   place-items: center;
   min-height: 0;
+  position: relative;
 }
 
 .board {
@@ -115,81 +196,165 @@
   grid-template-columns: repeat(15, 1fr);
   grid-template-rows: repeat(15, 1fr);
 
-  /* Le plateau reste carré et tient dans ce qui reste de l'écran. */
-  width: min(94vw, 62vh, 520px);
+  width: min(94vw, 58vh, 520px);
   aspect-ratio: 1;
+  position: relative;
 
-  padding: 6px;
-  border: 3px solid var(--wood-dark);
-  border-radius: 14px;
-  background: var(--surface-sunk);
-  box-shadow: var(--shadow-lift);
+  padding: 7px;
+  border: 4px solid #4a321a;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at center, #23160a 0%, #150d06 100%);
+  box-shadow:
+    inset 0 0 20px rgba(0, 0, 0, 0.8),
+    0 16px 36px -10px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(201, 146, 46, 0.25);
 }
 
+/* Cases */
 .cell {
-  border: 1px solid transparent;
-  border-radius: 2px;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.02);
+  transition: background 0.2s ease, transform 0.2s ease;
+  display: grid;
+  place-items: center;
 }
 
-/* Les cases du circuit se voient ; le reste du plateau est un fond. */
 .track {
-  border-color: color-mix(in srgb, var(--text) 22%, transparent);
-  background: var(--surface);
+  border-color: rgba(255, 245, 225, 0.14);
+  background: rgba(45, 32, 20, 0.65);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+.startGate {
+  border-width: 2px;
+  box-shadow: inset 0 0 8px currentColor, 0 0 6px currentColor;
+}
+
+.startGate::after {
+  content: '★';
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
 }
 
 .lane {
-  border-color: color-mix(in srgb, var(--text) 18%, transparent);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.5);
 }
 
+/* Centre du plateau (Podium d'arrivée) */
 .center {
   border-radius: 50%;
-  background: linear-gradient(140deg, var(--brass), var(--wood-dark));
+  background: radial-gradient(circle, #f5c842 0%, #a27218 55%, #3d2407 100%);
+  box-shadow: 0 0 14px rgba(245, 200, 66, 0.6), inset 0 0 6px rgba(0, 0, 0, 0.6);
+  z-index: 1;
+  display: grid;
+  place-items: center;
 }
 
-/* Quand il ne reste qu'à lancer, tout le plateau répond au doigt. */
+.center::after {
+  content: '👑';
+  font-size: 0.9rem;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+  animation: crownPulse 2s ease-in-out infinite;
+}
+
+@keyframes crownPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
+
+/* Trajectoire animée (Dots lumineux sur le chemin) */
+.pathDot {
+  position: relative;
+}
+
+.pathDot::before {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffd700;
+  box-shadow: 0 0 8px #ffd700, 0 0 14px #ffa500;
+  animation: dotBlink 0.8s ease-in-out infinite alternate;
+  z-index: 2;
+}
+
+@keyframes dotBlink {
+  0% { transform: scale(0.6); opacity: 0.5; }
+  100% { transform: scale(1.2); opacity: 1; }
+}
+
+/* Case cible pour déplacement */
+.target {
+  border: 2px solid #35d878 !important;
+  background: rgba(53, 216, 120, 0.45) !important;
+  cursor: pointer;
+  z-index: 4;
+  animation: targetPulse 0.9s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(53, 216, 120, 0.7);
+}
+
+.target::after {
+  content: '🎯';
+  font-size: 0.7rem;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.8));
+}
+
+@keyframes targetPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.92); opacity: 0.7; }
+}
+
+/* Écuries */
+.stable {
+  border: 3px solid;
+  border-radius: 16px;
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.6), 0 4px 10px rgba(0, 0, 0, 0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+.stable::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.08), transparent 70%);
+  pointer-events: none;
+}
+
+.stableEmpty {
+  opacity: 0.3;
+  border-style: dashed;
+}
+
+/* Quand tout le plateau peut être touché pour lancer */
 .boardWrapper[role='button'] {
   cursor: pointer;
 }
 
 .boardWrapper[role='button'] .board {
-  animation: attend 2.4s ease-in-out infinite;
+  animation: boardInvite 2s ease-in-out infinite;
 }
 
-@keyframes attend {
-  0%, 100% { box-shadow: var(--shadow-lift); }
-  50% { box-shadow: var(--shadow-lift), 0 0 0 3px color-mix(in srgb, var(--brass) 45%, transparent); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .boardWrapper[role='button'] .board {
-    animation: none;
+@keyframes boardInvite {
+  0%, 100% {
+    box-shadow:
+      inset 0 0 20px rgba(0, 0, 0, 0.8),
+      0 16px 36px -10px rgba(0, 0, 0, 0.85),
+      0 0 0 1px rgba(201, 146, 46, 0.25);
   }
-}
-
-/* Une case d'arrivée possible : c'est le seul élément qui bouge à l'écran, et
-   il indique où le pion choisi peut aller. */
-.target {
-  border: 2px solid var(--green);
-  background: color-mix(in srgb, var(--green) 45%, var(--surface));
-  cursor: pointer;
-  animation: pulse 1.1s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .target {
-    animation: none;
+  50% {
+    box-shadow:
+      inset 0 0 20px rgba(0, 0, 0, 0.8),
+      0 16px 40px -10px rgba(0, 0, 0, 0.9),
+      0 0 0 4px rgba(201, 146, 46, 0.65),
+      0 0 22px rgba(201, 146, 46, 0.4);
   }
-}
-
-/* Les écuries, en fond derrière les cases. */
-.stable {
-  border: 3px solid;
-  border-radius: 12px;
 }
 
 /* --- Pions ------------------------------------------------------------------ */
@@ -198,8 +363,7 @@
   position: relative;
   display: grid;
   place-items: center;
-  /* Les pions passent au-dessus des cases sans quitter la grille. */
-  z-index: 2;
+  z-index: 3;
   pointer-events: none;
 }
 
@@ -214,180 +378,283 @@
   background: none;
   pointer-events: auto;
   cursor: default;
-  transition: filter 0.18s ease;
+  transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1), filter 0.2s ease;
 }
 
 .pawn img {
-  width: 116%;
-  height: 116%;
+  width: 118%;
+  height: 118%;
   object-fit: contain;
-  filter: drop-shadow(0 2px 2px rgba(20, 12, 4, 0.55));
+  filter: drop-shadow(0 3px 3px rgba(10, 5, 2, 0.75));
 }
 
-/*
- * Un pion qui n'est pas le nôtre laisse passer le clic.
- *
- * Les pions se dessinent au-dessus des cases ; sans cela, un pion adverse posé
- * sur une case d'arrivée interceptait le clic et le mangeait, puisque son
- * bouton est désactivé. On ne pouvait donc pas désigner la case où l'attraper —
- * précisément là où l'on veut aller.
- */
 .pawn:disabled {
   pointer-events: none;
 }
 
-/* Sur une case d'arrivée, les pions s'effacent devant elle : c'est la case
-   qu'on vise, et le pion qui s'y trouve est justement celui qu'on va prendre. */
 .onTarget .pawn {
   pointer-events: none;
 }
 
-/* Un pion jouable s'éclaire : sans cela, on tâtonne à chaque lancer. */
+/* Pion jouable */
 .playable {
   cursor: pointer;
+  animation: playableBob 1.2s ease-in-out infinite;
 }
 
 .playable img {
-  filter: drop-shadow(0 0 4px var(--green)) drop-shadow(0 2px 2px rgba(20, 12, 4, 0.55));
+  filter: drop-shadow(0 0 6px #35d878) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.8));
+}
+
+@keyframes playableBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* Pion sélectionné */
+.selected {
+  z-index: 10;
 }
 
 .selected img {
-  filter: drop-shadow(0 0 6px var(--brass)) drop-shadow(0 2px 2px rgba(20, 12, 4, 0.6));
-  transform: scale(1.12);
+  filter: drop-shadow(0 0 9px #ffd700) drop-shadow(0 0 16px rgba(255, 215, 0, 0.8)) drop-shadow(0 4px 6px rgba(0, 0, 0, 0.9));
+  transform: scale(1.22) translateY(-4px);
 }
 
-/* Un prisonnier se distingue de ceux qui attendent chez eux : il est retenu
-   ailleurs, et son propriétaire doit le voir. */
-.captive img {
-  filter: grayscale(0.7) drop-shadow(0 2px 2px rgba(20, 12, 4, 0.5));
+/* Pion prisonnier */
+.captive {
   opacity: 0.75;
 }
 
-/* Au-delà de deux pions sur une case, on compte plutôt que d'empiler. */
-.stack {
-  position: absolute;
-  right: -3px;
-  bottom: -3px;
-  min-width: 15px;
-  height: 15px;
-  border-radius: 50px;
-  background: var(--text);
-  color: var(--surface);
-  font-size: 0.55rem;
-  font-weight: 800;
-  line-height: 15px;
-  text-align: center;
-  z-index: 3;
+.captive img {
+  filter: grayscale(0.7) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
 }
 
-/* Un barrage se signale : c'est une information de jeu, pas un détail. */
+.captiveBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  font-size: 0.65rem;
+  z-index: 4;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.9));
+}
+
+/* Barrage fortifié */
 .blockade {
   position: absolute;
-  inset: -2px;
-  border: 2px solid var(--red);
-  border-radius: 4px;
+  inset: -3px;
+  border: 2.5px solid #ff4444;
+  border-radius: 6px;
+  box-shadow: 0 0 10px rgba(255, 68, 68, 0.7), inset 0 0 6px rgba(255, 68, 68, 0.4);
   z-index: 1;
+  animation: shieldPulse 1.6s ease-in-out infinite;
 }
 
-/* --- Dés et messages -------------------------------------------------------- */
+@keyframes shieldPulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+/* Pions exposés (danger) */
+.exposed {
+  position: absolute;
+  inset: -2px;
+  border: 2px dashed rgba(255, 80, 80, 0.75);
+  border-radius: 4px;
+  z-index: 1;
+  animation: dangerBlink 1.4s ease-in-out infinite;
+}
+
+@keyframes dangerBlink {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Compteur de pile */
+.stack {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #2a1a0c;
+  color: #ffd700;
+  border: 1.5px solid #ffd700;
+  font-size: 0.6rem;
+  font-weight: 900;
+  line-height: 15px;
+  text-align: center;
+  z-index: 4;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+/* --- Pion en cours d'animation de saut (Hop & Bounce) ----------------------- */
+
+.animatingPawnLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(15, 1fr);
+  grid-template-rows: repeat(15, 1fr);
+  padding: 7px;
+}
+
+.animatingPawn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.animatingPawn img {
+  width: 125%;
+  height: 125%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.75)) drop-shadow(0 0 10px rgba(255, 215, 0, 0.6));
+  animation: pawnHop 0.17s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes pawnHop {
+  0% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-16px) scale(1.25); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+/* Éclat d'impact de capture */
+.captureBurst {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 60, 60, 0.9) 0%, rgba(255, 150, 0, 0.6) 50%, transparent 80%);
+  animation: burstExpand 0.45s ease-out forwards;
+  pointer-events: none;
+  z-index: 25;
+}
+
+@keyframes burstExpand {
+  0% { transform: scale(0.3); opacity: 1; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+/* --- Dés et commandes en bas ----------------------------------------------- */
 
 .bottom {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding-bottom: 10px;
+  padding-bottom: 6px;
 }
 
-.dice {
+.diceContainer {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 52px;
+  gap: 12px;
+  min-height: 56px;
 }
 
 .die {
+  position: relative;
   display: grid;
   place-items: center;
-  padding: 3px;
-  border-radius: 10px;
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
-  animation: land 0.3s cubic-bezier(0.2, 0.9, 0.25, 1);
+  padding: 4px;
+  border-radius: 12px;
+  background: #fdfaf3;
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.5),
+    inset 0 1px 2px rgba(255, 255, 255, 0.9),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(201, 146, 46, 0.4);
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
-@keyframes land {
-  from { transform: scale(0.6) rotate(-18deg); opacity: 0; }
-  to { transform: scale(1) rotate(0); opacity: 1; }
+.dieUsed {
+  opacity: 0.35;
+  transform: scale(0.88);
+  filter: grayscale(0.6);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .die {
-    animation: none;
-  }
+.dieActive {
+  transform: scale(1.08);
+  box-shadow: 0 0 14px rgba(201, 146, 46, 0.8), 0 8px 18px rgba(0, 0, 0, 0.6);
+  border-color: var(--brass);
 }
 
-.roll {
+.dieRolling {
+  animation: diceTumble 0.12s linear infinite;
+}
+
+@keyframes diceTumble {
+  0% { transform: rotate(0deg) scale(1.05) translateY(-3px); }
+  25% { transform: rotate(10deg) scale(0.95) translateY(2px); }
+  50% { transform: rotate(-8deg) scale(1.1) translateY(-4px); }
+  75% { transform: rotate(6deg) scale(0.98) translateY(1px); }
+  100% { transform: rotate(0deg) scale(1.05) translateY(-3px); }
+}
+
+.rollBtn {
   min-height: 52px;
-  padding: 0 26px;
+  padding: 0 28px;
   font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.notice,
+.diceIcon {
+  font-size: 1.15rem;
+}
+
 .hint {
   margin: 0;
   font-size: 0.8rem;
+  color: rgba(253, 246, 232, 0.8);
   text-align: center;
+  font-weight: 600;
 }
 
-.notice {
-  color: var(--brass);
-  font-weight: 700;
-}
-
-.hint {
-  color: rgba(253, 246, 232, 0.72);
-}
-
-/* --- Fin de partie ---------------------------------------------------------- */
+/* --- Modale Fin de Partie --------------------------------------------------- */
 
 .over {
   text-align: center;
+  padding: 10px;
+}
+
+.overCrown {
+  font-size: 2.6rem;
+  animation: crownBounce 1s ease-in-out infinite alternate;
+}
+
+@keyframes crownBounce {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(-8px) scale(1.15); }
 }
 
 .over h2 {
-  margin: 0 0 16px;
+  margin: 8px 0 16px;
   font-family: var(--font-display);
-  font-size: 1.4rem;
+  font-size: 1.45rem;
   color: var(--text);
 }
 
 .again {
   width: 100%;
   min-height: 52px;
+  font-size: 1rem;
 }
 
-/* Sur un écran bas, le plateau cède la place aux dés plutôt que de les pousser
-   hors de vue. */
-@media (max-height: 640px) {
+/* Responsivité petits écrans */
+@media (max-height: 660px) {
   .board {
-    width: min(94vw, 54vh, 520px);
+    width: min(94vw, 50vh, 520px);
+    padding: 5px;
   }
-}
-
-/* Un camp sans joueur reste dessiné, mais s'efface : le plateau garde sa forme
-   sans faire croire qu'une place est prise. */
-.stableEmpty {
-  opacity: 0.4;
-  border-style: dashed;
-}
-
-/* Deux pions empilés hors de leur porte se prennent ensemble : le liseré rouge
-   du barrage dirait le contraire, celui-ci prévient du risque. */
-.exposed {
-  position: absolute;
-  inset: -2px;
-  border: 2px dashed color-mix(in srgb, var(--red) 70%, transparent);
-  border-radius: 4px;
-  z-index: 1;
+  .screen {
+    gap: 4px;
+    padding: 4px 8px;
+  }
 }
