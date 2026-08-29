@@ -50,8 +50,10 @@ const etat = (
     pawns,
     current: options.current ?? 0,
     dice: options.dice ?? [],
-    // Le lancer est intact tant qu'on n'a rien joué.
+    // Le lancer est intact tant qu'on n'a rien joué, et les six qu'il porte
+    // sont ceux du tour.
     rolled: options.dice ?? [],
+    sixesThisTurn: (options.dice ?? []).filter((die) => die === 6).length,
   };
 };
 
@@ -254,6 +256,47 @@ describe('barrages, à la porte seulement', () => {
     );
 
     assert.equal(passe.length, 0);
+  });
+
+  test('trois pions demandent trois six', () => {
+    const troisPions = (sixes: number) => {
+      const base = etat(
+        [
+          { owner: 0, spot: surCase(8) },
+          { owner: 1, spot: surCase(12) },
+          { owner: 1, spot: surCase(12) },
+          { owner: 1, spot: surCase(12) },
+        ],
+        { current: 0, dice: [6, 6] },
+      );
+      return { ...base, sixesThisTurn: sixes };
+    };
+
+    const passe = (state: LudoState) =>
+      legalLudoMoves(state).some((m) => m.to.zone === 'track' && m.to.square === 14);
+
+    assert.ok(!passe(troisPions(2)), 'un double-six ne suffit pas contre trois pions');
+    assert.ok(passe(troisPions(3)), 'le troisième six ouvre le passage');
+  });
+
+  test('les six s’additionnent d’un lancer à l’autre', () => {
+    // Deux dés ne donnent jamais trois six d'un coup : c'est la relance du
+    // double-six qui permet de les réunir.
+    let state = rollInto(createLudoGame(4), [6, 6]);
+    assert.equal(state.sixesThisTurn, 2);
+
+    state = endTurn(state, true);
+    assert.equal(state.sixesThisTurn, 2, 'la relance garde les six acquis');
+
+    state = rollInto(state, [6, 3]);
+    assert.equal(state.sixesThisTurn, 3, 'le troisième six s’ajoute');
+  });
+
+  test('passer la main efface les six réunis', () => {
+    let state = rollInto(createLudoGame(4), [6, 6]);
+    state = endTurn(state, false);
+
+    assert.equal(state.sixesThisTurn, 0, 'le joueur suivant repart de zéro');
   });
 
   /*

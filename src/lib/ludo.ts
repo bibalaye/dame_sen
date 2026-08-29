@@ -128,6 +128,14 @@ export interface LudoState {
    */
   readonly rolled: readonly number[];
   /**
+   * Six accumulés depuis le début du tour, relances comprises.
+   *
+   * Forcer un barrage demande autant de six qu'il compte de pions. Avec deux
+   * dés, trois six ne tombent jamais d'un coup : ils s'additionnent d'un lancer
+   * à l'autre, ce que le double-six rend possible en rendant la main.
+   */
+  readonly sixesThisTurn: number;
+  /**
    * Relances déjà accordées dans ce tour. Un six rend la main, mais pas
    * indéfiniment : sans plafond, une série chanceuse tiendrait le tour ouvert
    * sans fin.
@@ -155,6 +163,7 @@ export const createLudoGame = (playerCount = 4): LudoState => {
     current: 0,
     dice: [],
     rolled: [],
+    sixesThisTurn: 0,
     extraRolls: 0,
     status: { kind: 'playing' },
     playerCount,
@@ -189,6 +198,16 @@ export const blockadeOwner = (
 
   return square === homeGate(premier) ? premier : null;
 };
+
+/**
+ * Nombre de pions tenant le barrage, ou zéro s'il n'y en a pas.
+ *
+ * C'est le prix à payer pour passer : autant de six que de pions. Deux pions
+ * demandent un double-six ; trois en demandent un de plus, réuni au lancer
+ * suivant.
+ */
+export const blockadeSize = (state: LudoState, square: number): number =>
+  blockadeOwner(state, square) === null ? 0 : pawnsOnSquare(state, square).length;
 
 /** Les pions d'un joueur qui ont fini leur course. */
 export const finishedCount = (state: LudoState, player: LudoPlayerId): number =>
@@ -239,15 +258,16 @@ const pathIsClear = (
   from: number,
   steps: number,
   mover: LudoPlayerId,
-  doubleSix: boolean,
+  sixes: number,
 ): boolean => {
-  // Un double-six force n'importe quel barrage : c'est la seule clé.
-  if (doubleSix) return true;
-
   for (let i = 1; i <= steps; i++) {
     const square = (from + i) % TRACK;
     const owner = blockadeOwner(state, square);
-    if (owner !== null && owner !== mover) return false;
+    if (owner === null || owner === mover) continue;
+
+    // Il faut autant de six que le barrage compte de pions : deux pions, deux
+    // six ; trois pions, trois six.
+    if (sixes < blockadeSize(state, square)) return false;
   }
   return true;
 };
@@ -283,7 +303,7 @@ const movesForPawn = (
   state: LudoState,
   index: number,
   die: number,
-  doubleSix: boolean,
+  sixes: number,
 ): LudoMove[] => {
   const pawn = state.pawns[index];
   if (pawn.owner !== state.current) return [];
@@ -392,7 +412,7 @@ const movesForPawn = (
   if (die >= restant) {
     const step = die - restant;
 
-    if (!pathIsClear(state, spot.square, restant - 1, pawn.owner, doubleSix)) {
+    if (!pathIsClear(state, spot.square, restant - 1, pawn.owner, sixes)) {
       return [];
     }
 
@@ -419,7 +439,7 @@ const movesForPawn = (
   }
 
   // Avance ordinaire.
-  if (pathIsClear(state, spot.square, die, pawn.owner, doubleSix)) {
+  if (pathIsClear(state, spot.square, die, pawn.owner, sixes)) {
     const square = (spot.square + die) % TRACK;
     const landing = landingOnTrack(state, square, pawn.owner);
 
@@ -445,7 +465,7 @@ const movesForPawn = (
     const step = die - jusquAuSeuil - 1;
 
     if (jusquAuSeuil >= die || step < 0 || step >= HOME_LENGTH) continue;
-    if (!pathIsClear(state, spot.square, jusquAuSeuil, pawn.owner, doubleSix)) continue;
+    if (!pathIsClear(state, spot.square, jusquAuSeuil, pawn.owner, sixes)) continue;
 
     const proie = state.pawns.findIndex(
       (p) =>
@@ -475,20 +495,19 @@ export const isDoubleSix = (dice: readonly number[]): boolean =>
 /**
  * Tous les coups jouables avec les dés restants.
  *
- * Le double-six ne compte que tant que les deux dés sont intacts : après en
- * avoir dépensé un, il ne reste qu'un six ordinaire, et les barrages tiennent
- * de nouveau.
+ * Les six réunis pendant le tour restent acquis même une fois les dés
+ * dépensés : c'est ainsi qu'on force un barrage de trois pions, en additionnant
+ * un double-six et le six du lancer suivant.
  */
 export const legalLudoMoves = (state: LudoState): LudoMove[] => {
   if (state.status.kind !== 'playing') return [];
 
-  const doubleSix = isDoubleSix(state.dice);
   const valeurs = [...new Set(state.dice)];
   const moves: LudoMove[] = [];
 
   for (const die of valeurs) {
     for (let i = 0; i < state.pawns.length; i++) {
-      moves.push(...movesForPawn(state, i, die, doubleSix));
+      moves.push(...movesForPawn(state, i, die, state.sixesThisTurn));
     }
   }
 
@@ -511,7 +530,15 @@ export const nextPlayer = (state: LudoState): LudoPlayerId => {
  */
 export const rollInto = (state: LudoState, dice: readonly number[]): LudoState => {
   if (state.status.kind !== 'playing') return state;
-  return { ...state, dice: [...dice], rolled: [...dice] };
+
+  return {
+    ...state,
+    dice: [...dice],
+    rolled: [...dice],
+    // Les six s'ajoutent à ceux du tour : c'est ce qui permet d'en réunir trois
+    // ou quatre, un lancer après l'autre.
+    sixesThisTurn: state.sixesThisTurn + dice.filter((die) => die === 6).length,
+  };
 };
 
 /** Un lancer, à partir d'une source de hasard fournie. */
@@ -627,6 +654,8 @@ export const endTurn = (state: LudoState, again: boolean): LudoState => {
     ...state,
     dice: [],
     rolled: [],
+    // Une relance poursuit le même tour : les six déjà réunis restent acquis.
+    sixesThisTurn: again ? state.sixesThisTurn : 0,
     current: again ? state.current : nextPlayer(state),
     extraRolls: again ? state.extraRolls + 1 : 0,
   };

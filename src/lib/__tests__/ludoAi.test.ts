@@ -42,8 +42,10 @@ const etat = (
     pawns,
     current: options.current ?? 0,
     dice: options.dice ?? [],
-    // Le lancer est intact tant qu'on n'a rien joué.
+    // Le lancer est intact tant qu'on n'a rien joué, et les six qu'il porte
+    // sont ceux du tour.
     rolled: options.dice ?? [],
+    sixesThisTurn: (options.dice ?? []).filter((die) => die === 6).length,
   };
 };
 

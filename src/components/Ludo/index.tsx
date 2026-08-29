@@ -13,6 +13,7 @@ import {
   isCaptive,
   blockadeOwner,
   legalLudoMoves,
+  pawnsOnSquare,
   playLudoMove,
   seatsFor,
   turnIsOver,
@@ -280,7 +281,11 @@ const Ludo: React.FC<LudoProps> = ({
             className={classes}
             style={{ gridRow: row + 1, gridColumn: col + 1, background: teinte }}
             onClick={() => handleTarget(cible.spot)}
-            aria-label="Jouer ici"
+            aria-label={
+              cible.spot.zone === 'track' && pawnsOnSquare(state, cible.spot.square).length
+                ? 'Attraper ici'
+                : 'Jouer ici'
+            }
           />
         ) : (
           <div
@@ -321,7 +326,13 @@ const Ludo: React.FC<LudoProps> = ({
       </header>
 
       <div className={styles.boardWrapper}>
-        <div className={styles.board}>
+        {/*
+          Une fois un pion choisi, on désigne une case : plus aucun pion ne doit
+          intercepter le clic, pas même les siens. Sans cela, une case occupée
+          restait impossible à toucher — celle-là même où l'on veut aller
+          prendre.
+        */}
+        <div className={`${styles.board} ${selected !== null ? styles.picking : ''}`}>
           {/*
             Les quatre camps sont dessinés même quand deux joueurs seulement
             s'affrontent : un plateau amputé de ses coins ne ressemble plus à un

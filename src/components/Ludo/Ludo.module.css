@@ -157,6 +157,28 @@
   filter: drop-shadow(0 2px 2px rgba(20, 12, 4, 0.55));
 }
 
+/*
+ * Un pion qui n'est pas le nôtre laisse passer le clic.
+ *
+ * Les pions se dessinent au-dessus des cases ; sans cela, un pion adverse posé
+ * sur une case d'arrivée interceptait le clic et le mangeait, puisque son
+ * bouton est désactivé. On ne pouvait donc pas désigner la case où l'attraper —
+ * précisément là où l'on veut aller.
+ */
+.pawn:disabled {
+  pointer-events: none;
+}
+
+/* Pendant le choix d'une destination, seule la case compte — sauf le pion
+   choisi, qu'on doit pouvoir retoucher pour changer d'avis. */
+.picking .pawn {
+  pointer-events: none;
+}
+
+.picking .selected {
+  pointer-events: auto;
+}
+
 /* Un pion jouable s'éclaire : sans cela, on tâtonne à chaque lancer. */
 .playable {
   cursor: pointer;
