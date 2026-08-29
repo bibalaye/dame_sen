@@ -105,8 +105,9 @@ const LudoRules: React.FC<LudoRulesProps> = ({ onClose }) => (
       </p>
       <p>
         Et rentrer n’est jamais définitif : un <strong>6</strong> ressort le
-        pion sur le circuit, à votre seuil — pour aller prendre, ou pour ne pas
-        l’y laisser attendre le bon chiffre.
+        pion sur le circuit, <strong>juste avant votre seuil</strong> — pour
+        aller prendre, ou pour ne pas l’y laisser attendre le bon chiffre. De
+        là, il rentre à nouveau quand il veut, ou repart pour un tour.
       </p>
     </section>
 

@@ -62,6 +62,18 @@ export const homeGate = (player: LudoPlayerId): number =>
   (START_SQUARE[player] - 1 + TRACK) % TRACK;
 
 /**
+ * La case juste avant le seuil : c'est là qu'un pion ressort de sa propre
+ * allée.
+ *
+ * Le reposer sur le seuil même l'obligerait à rentrer au coup suivant, ou
+ * presque. Une case plus tôt, il garde les deux options — rentrer, ou repartir
+ * pour un tour — et c'est bien le choix qu'on cherchait à lui rendre en le
+ * laissant ressortir.
+ */
+export const homeApproach = (player: LudoPlayerId): number =>
+  (START_SQUARE[player] - 2 + TRACK) % TRACK;
+
+/**
  * Les coins occupés selon le nombre de joueurs.
  *
  * À deux, on s'assoit en diagonale : côte à côte, l'un aurait la moitié du
@@ -382,16 +394,19 @@ const movesForPawn = (
     const step = spot.step + die;
 
     /*
-     * Un six ramène le pion sur le circuit, à son seuil — d'où qu'il soit dans
-     * l'allée. Rentrer n'est donc jamais définitif : on peut ressortir pour
+     * Un six ramène le pion sur le circuit, juste avant son seuil — d'où qu'il
+     * soit dans l'allée. Rentrer n'est donc jamais définitif : on ressort pour
      * aller prendre, ou pour ne pas laisser un pion attendre le chiffre exact
      * pendant que la partie se joue ailleurs.
+     *
+     * Avant le seuil, et non dessus : le pion garde ainsi le choix de rentrer
+     * ou de repartir, qui est précisément ce qu'on lui rend.
      *
      * Le six ne servait de toute façon à rien ici : l'allée ne compte que cinq
      * cases, et il en aurait fallu une sixième pour tomber juste.
      */
     if (die === 6) {
-      const square = homeGate(pawn.owner);
+      const square = homeApproach(pawn.owner);
       const landing = landingOnTrack(state, square, pawn.owner);
       if (!landing.allowed) return [];
 

@@ -11,6 +11,7 @@ import {
   createLudoGame,
   earnsExtraRoll,
   endTurn,
+  homeApproach,
   homeGate,
   isCaptive,
   isTrespassing,
@@ -464,8 +465,8 @@ describe('allée finale', () => {
   });
 
   test('un six ramène le pion de son allée sur le circuit', () => {
-    // Rentrer n'est jamais définitif : un six ressort le pion à son seuil,
-    // d'où qu'il soit dans l'allée.
+    // Rentrer n'est jamais définitif : un six ressort le pion juste avant son
+    // seuil, d'où qu'il soit dans l'allée.
     for (const step of [0, 1, 2, 3, 4]) {
       const state = etat([{ owner: 0, spot: dansMaison(0, step) }], {
         current: 0,
@@ -474,8 +475,27 @@ describe('allée finale', () => {
 
       const sortie = legalLudoMoves(state).find((m) => m.kind === 'escape');
       assert.ok(sortie, `le six doit ressortir le pion depuis la case ${step}`);
-      assert.deepEqual(sortie!.to, { zone: 'track', square: homeGate(0) });
+      assert.deepEqual(sortie!.to, { zone: 'track', square: homeApproach(0) });
     }
+  });
+
+  test('le pion ressorti garde le choix de rentrer ou de repartir', () => {
+    // C'est tout l'intérêt de le reposer avant le seuil : sur le seuil même,
+    // il aurait été contraint de rentrer au coup suivant.
+    const state = etat([{ owner: 0, spot: surCase(homeApproach(0)) }], {
+      current: 0,
+      dice: [3, 2],
+    });
+    const moves = legalLudoMoves(state);
+
+    assert.ok(
+      moves.some((m) => m.to.zone === 'home'),
+      'rentrer reste possible',
+    );
+    assert.ok(
+      moves.some((m) => m.to.zone === 'track'),
+      'repartir pour un tour aussi',
+    );
   });
 
   test('le six ne fait pas rentrer au centre', () => {
@@ -496,17 +516,17 @@ describe('allée finale', () => {
     );
   });
 
-  test('en ressortant, le pion peut prendre ce qui est sur son seuil', () => {
+  test('en ressortant, le pion prend ce qui occupe sa case', () => {
     const state = etat(
       [
         { owner: 0, spot: dansMaison(0, 2) },
-        { owner: 1, spot: surCase(homeGate(0)) },
+        { owner: 1, spot: surCase(homeApproach(0)) },
       ],
       { current: 0, dice: [6, 1] },
     );
 
     const sortie = legalLudoMoves(state).find((m) => m.kind === 'escape');
-    assert.equal(sortie!.captures?.length, 1, 'le seuil se libère à la prise');
+    assert.equal(sortie!.captures?.length, 1, 'la case se libère à la prise');
   });
 
   test('il faut le compte exact pour atteindre le centre', () => {
