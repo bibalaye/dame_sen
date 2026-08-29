@@ -172,6 +172,7 @@ const HomeScreen: React.FC = () => {
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [timeControl, setTimeControl] = useState<TimeControl>('none');
   const [morpionVariant, setMorpionVariant] = useState<MorpionVariant>('moving-heart');
+  const [ludoPlayers, setLudoPlayers] = useState(4);
 
   const modes = MODES.filter(
     (entry) =>
@@ -322,6 +323,38 @@ const HomeScreen: React.FC = () => {
             </>
           )}
 
+          {kind === 'ludo' && (
+            <>
+              <hr className="uiDivider" />
+              <section className={styles.block}>
+                <h2 className={styles.label}>Joueurs</h2>
+                <div className={styles.segments} role="group">
+                  {[2, 3, 4].map((nombre) => (
+                    <button
+                      key={nombre}
+                      type="button"
+                      className={`${styles.segment} ${
+                        ludoPlayers === nombre ? styles.segmentOn : ''
+                      }`}
+                      onClick={() => {
+                        play('click');
+                        setLudoPlayers(nombre);
+                      }}
+                      aria-pressed={ludoPlayers === nombre}
+                    >
+                      {nombre}
+                    </button>
+                  ))}
+                </div>
+                <p className={styles.hint}>
+                  {mode === 'pass'
+                    ? `${ludoPlayers} joueurs autour de cet appareil.`
+                    : `Vous et ${ludoPlayers - 1} adversaire${ludoPlayers > 2 ? 's' : ''}.`}
+                </p>
+              </section>
+            </>
+          )}
+
           {kind === 'morpion' && (
             <>
               <hr className="uiDivider" />
@@ -455,7 +488,15 @@ const HomeScreen: React.FC = () => {
           className={`uiButton ${styles.play}`}
           onClick={() => {
             play('select');
-            startGame({ kind, mode, difficulty, timeControl, morpionVariant, rules });
+            startGame({
+              kind,
+              mode,
+              difficulty,
+              timeControl,
+              morpionVariant,
+              ludoPlayers,
+              rules,
+            });
           }}
         >
           <Image src="/assets/ui/icon-play.png" alt="" width={18} height={20} />

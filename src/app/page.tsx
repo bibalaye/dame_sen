@@ -16,8 +16,16 @@ import type { MorpionDifficulty } from '@/lib/morpion';
  * Tous passent par la porte d'entrée : sans compte, on ne joue pas.
  */
 export default function Page() {
-  const { screen, kind, mode, difficulty, morpionVariant, goHome, recordGame } =
-    useGameContext();
+  const {
+    screen,
+    kind,
+    mode,
+    difficulty,
+    morpionVariant,
+    ludoPlayers,
+    goHome,
+    recordGame,
+  } = useGameContext();
 
   if (screen === 'home') {
     return (
@@ -40,6 +48,7 @@ export default function Page() {
           <InviteBanner />
           <Ludo
             mode={mode === 'pass' ? 'pass' : 'solo'}
+            playerCount={ludoPlayers}
             difficulty={
               difficulty === 'easy' ? 'easy' : difficulty === 'medium' ? 'medium' : 'hard'
             }

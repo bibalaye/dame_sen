@@ -399,8 +399,11 @@ describe('déroulement du tour', () => {
     assert.deepEqual(apres.dice, [5], 'l’autre dé reste à jouer');
   });
 
-  test('un six rend la main, mais pas indéfiniment', () => {
-    assert.ok(earnsExtraRoll([6, 2], 0));
+  test('il faut un double-six pour rejouer, pas un six', () => {
+    // Avec deux dés, un six sort dans près d'un lancer sur trois : relancer à
+    // chaque fois donnerait des tours qui n'en finissent pas.
+    assert.ok(earnsExtraRoll([6, 6], 0));
+    assert.ok(!earnsExtraRoll([6, 2], 0), 'un seul six ne rend pas la main');
     assert.ok(!earnsExtraRoll([4, 2], 0));
     assert.ok(!earnsExtraRoll([6, 6], 3), 'le plafond arrête la série');
   });
@@ -432,14 +435,14 @@ describe('déroulement du tour', () => {
     assert.ok(turnIsOver(state));
   });
 
-  test('le six se reconnaît encore après avoir été dépensé', () => {
-    let state = rollInto(createLudoGame(4), [6, 2]);
+  test('le double-six se reconnaît encore après avoir été dépensé', () => {
+    let state = rollInto(createLudoGame(4), [6, 6]);
     state = playLudoMove(state, legalLudoMoves(state)[0]);
 
-    assert.ok(!state.dice.includes(6), 'le six a été joué');
+    assert.equal(state.dice.length, 1, 'un six a été joué');
     assert.ok(
       earnsExtraRoll(state.rolled, state.extraRolls),
-      'le lancer garde la trace du six, sinon la relance se perdrait',
+      'le lancer garde la trace du double, sinon la relance se perdrait',
     );
   });
 
@@ -470,8 +473,8 @@ describe('la main tourne', () => {
    * joue, puis conclure. C'est ce que le composant fait, et c'est là que le
    * premier joueur gardait la main pour toute la partie.
    */
-  const jouerDesTours = (nombre: number) => {
-    let state = createLudoGame(4);
+  const jouerDesTours = (nombre: number, joueurs = 4) => {
+    let state = createLudoGame(joueurs);
     let graine = 20260829;
     const random = () => {
       graine = (graine * 1103515245 + 12345) % 2147483648;
@@ -517,6 +520,23 @@ describe('la main tourne', () => {
     );
   });
 
+  test('la main tourne aussi à deux et à trois', () => {
+    for (const joueurs of [2, 3]) {
+      const tours = jouerDesTours(40, joueurs);
+      const vus = new Set(tours);
+
+      assert.equal(
+        vus.size,
+        joueurs,
+        `à ${joueurs} joueurs, seuls ${[...vus].join(', ')} ont joué`,
+      );
+      assert.ok(
+        Math.max(...tours) < joueurs,
+        'aucun joueur absent de la table ne doit prendre la main',
+      );
+    }
+  });
+
   test('personne n’enchaîne un nombre déraisonnable de tours', () => {
     const tours = jouerDesTours(60);
 
@@ -527,8 +547,8 @@ describe('la main tourne', () => {
       record = Math.max(record, suite);
     }
 
-    // Un six rend la main, plafonné à trois relances : quatre tours d'affilée
-    // au plus.
+    // Un double-six rend la main, plafonné à trois relances : quatre tours
+    // d'affilée au plus.
     assert.ok(record <= 4, `un joueur a enchaîné ${record} tours de suite`);
   });
 

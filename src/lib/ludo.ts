@@ -577,13 +577,17 @@ export const turnContinues = (state: LudoState): boolean => {
 };
 
 /**
- * Vrai si le joueur relance après avoir épuisé ses dés. Un six rend la main —
- * c'est ce qui récompense la sortie d'écurie — mais pas indéfiniment.
+ * Vrai si le joueur relance après avoir épuisé ses dés.
+ *
+ * Il faut un double-six, pas un six. Avec deux dés, un six sort dans près d'un
+ * lancer sur trois : rendre la main à chaque fois donnerait des tours qui
+ * n'en finissent pas. Le double, lui, tombe une fois sur trente-six — et c'est
+ * déjà la combinaison qui force les barrages.
  */
 export const earnsExtraRoll = (
   dice: readonly number[],
   extraRolls: number,
-): boolean => dice.includes(6) && extraRolls < MAX_EXTRA_ROLLS;
+): boolean => isDoubleSix(dice) && extraRolls < MAX_EXTRA_ROLLS;
 
 /** Passe la main, dés remis à zéro. */
 export const endTurn = (state: LudoState, again: boolean): LudoState => {

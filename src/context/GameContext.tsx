@@ -156,6 +156,8 @@ export interface DailyState {
 
 export interface StartOptions {
   readonly kind?: GameKind;
+  /** Nombre de joueurs autour du plateau de ludo : deux, trois ou quatre. */
+  readonly ludoPlayers?: number;
   /** Règles choisies avant la partie ; les valeurs absentes gardent la coutume. */
   readonly rules?: RuleSet;
   readonly morpionVariant?: MorpionVariant;
@@ -169,6 +171,8 @@ interface GameContextType {
   screen: Screen;
   kind: GameKind;
   morpionVariant: MorpionVariant;
+  /** Joueurs assis autour du plateau de ludo. */
+  ludoPlayers: number;
   /** Règles en vigueur pour la partie de dames en cours. */
   rules: RuleSet;
   mode: GameMode;
@@ -387,6 +391,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [screen, setScreen] = useState<Screen>('home');
   const [kind, setKind] = useState<GameKind>('dames');
   const [morpionVariant, setMorpionVariant] = useState<MorpionVariant>('moving-heart');
+  const [ludoPlayers, setLudoPlayers] = useState(4);
   const [rules, setRules] = useState<RuleSet>(DEFAULT_RULES);
   const [mode, setMode] = useState<GameMode>('solo');
   const [variant, setVariant] = useState<Variant>('classic');
@@ -785,6 +790,10 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // les deux joueurs aux dames au moment même où la partie commençait.
     if (options.kind) setKind(options.kind);
     if (options.morpionVariant) setMorpionVariant(options.morpionVariant);
+    // Deux joueurs au moins, quatre au plus : le plateau n'en porte pas d'autres.
+    if (options.ludoPlayers) {
+      setLudoPlayers(Math.min(4, Math.max(2, options.ludoPlayers)));
+    }
     const nextRules = options.rules ?? rules;
     if (options.rules) setRules(options.rules);
     const nextVariant = options.variant ?? 'classic';
@@ -1356,6 +1365,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       screen,
       kind: activeKind,
       morpionVariant,
+      ludoPlayers,
       rules,
       mode,
       board: game.board,
@@ -1442,6 +1452,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       alert,
       bestChain,
       morpionVariant,
+      ludoPlayers,
       blackPieces,
       clock,
       createRoom,
