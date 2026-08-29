@@ -20,6 +20,7 @@ import {
   PIECES_PER_PLAYER,
   START_SQUARE,
   TRACK,
+  homeGate,
   type LudoPlayerId,
 } from './ludo.ts';
 
@@ -159,7 +160,19 @@ export const LUDO_NAMES: Readonly<Record<LudoPlayerId, string>> = {
   3: 'Or',
 };
 
-/** Contrôle de cohérence, utile aux tests et au développement. */
+/** Vrai si deux cases se touchent par un côté — pas en diagonale. */
+const adjacentes = (a: Cell, b: Cell): boolean =>
+  Math.abs(a.row - b.row) + Math.abs(a.col - b.col) === 1;
+
+/**
+ * Contrôle de cohérence, utile aux tests et au développement.
+ *
+ * La dernière vérification est celle qui manquait : le seuil d'un joueur doit
+ * toucher l'entrée de son allée. Les règles plaçaient le seuil une case trop
+ * loin, et rien ne s'y opposait — le pion bifurquait alors en diagonale,
+ * depuis une case qui ne touche pas son allée, tandis que celle qui la touche
+ * ne menait nulle part.
+ */
 export const boardIsSound = (): boolean => {
   if (TRACK_CELLS.length !== TRACK) return false;
 
@@ -169,6 +182,7 @@ export const boardIsSound = (): boolean => {
   for (const player of LUDO_PLAYERS) {
     if (homeCells(player).length !== HOME_LENGTH) return false;
     if (stableCells(player).length !== PIECES_PER_PLAYER) return false;
+    if (!adjacentes(TRACK_CELLS[homeGate(player)], homeCells(player)[0])) return false;
   }
   return true;
 };

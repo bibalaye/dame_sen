@@ -54,12 +54,18 @@ export const START_SQUARE: Readonly<Record<LudoPlayerId, number>> = {
 };
 
 /**
- * Dernière case du circuit avant l'allée d'un joueur : celle qui précède son
- * départ. C'est aussi le point par lequel un adversaire peut s'introduire chez
- * lui.
+ * Le seuil : la case du circuit d'où l'on bifurque dans son allée. C'est aussi
+ * le point par lequel un adversaire peut s'y introduire.
+ *
+ * Deux cases avant le départ, et non une. C'est la géométrie du plateau qui le
+ * dit : l'entrée de l'allée touche cette case-là, et seulement elle. La
+ * suivante est déjà passée devant, et le pion qui s'y trouve doit refaire un
+ * tour. `boardIsSound` vérifie cette adjacence pour les quatre joueurs — elle
+ * manquait, et le pion bifurquait en diagonale depuis une case qui ne touche
+ * pas son allée.
  */
 export const homeGate = (player: LudoPlayerId): number =>
-  (START_SQUARE[player] - 1 + TRACK) % TRACK;
+  (START_SQUARE[player] - 2 + TRACK) % TRACK;
 
 /**
  * La case juste avant le seuil : c'est là qu'un pion ressort de sa propre
@@ -71,7 +77,7 @@ export const homeGate = (player: LudoPlayerId): number =>
  * laissant ressortir.
  */
 export const homeApproach = (player: LudoPlayerId): number =>
-  (START_SQUARE[player] - 2 + TRACK) % TRACK;
+  (START_SQUARE[player] - 3 + TRACK) % TRACK;
 
 /**
  * Les coins occupés selon le nombre de joueurs.
@@ -153,6 +159,17 @@ export interface LudoState {
    * sans fin.
    */
   readonly extraRolls: number;
+  /**
+   * Le pion qui vient de prendre, s'il y en a un.
+   *
+   * Une prise coûte le reste du lancer à celui qui la fait : le second dé
+   * revient à un autre pion, ou à personne. Sans quoi un seul pion enchaînait
+   * la prise et la fuite, et rien ne se serait jamais pris en retour.
+   *
+   * Le verrou tombe au lancer suivant, relance comprise : il ne coûte que le
+   * lancer où la prise a eu lieu.
+   */
+  readonly lockedPawn: number | null;
   readonly status: LudoStatus;
   /** Nombre de joueurs réellement assis : les autres pions restent au repos. */
   readonly playerCount: number;
@@ -177,6 +194,7 @@ export const createLudoGame = (playerCount = 4): LudoState => {
     rolled: [],
     sixesThisTurn: 0,
     extraRolls: 0,
+    lockedPawn: null,
     status: { kind: 'playing' },
     playerCount,
   };
@@ -447,36 +465,45 @@ const movesForPawn = (
   }
 
   // --- Circuit --------------------------------------------------------------
-  const progress = progressOf(pawn);
-  const restant = TRACK - progress;
+  /*
+   * Ce qui reste à parcourir jusqu'à son propre seuil : zéro dessus, cinquante
+   * et un pour le pion qui vient de le dépasser — celui-là refera le tour.
+   *
+   * Le compte part du seuil, non du départ. Les deux ne sont pas à la même
+   * distance, et les confondre décalait l'entrée de l'allée d'une case.
+   */
+  const versSeuil = (homeGate(pawn.owner) - spot.square + TRACK) % TRACK;
+  const caseAllee = die - versSeuil - 1;
 
   /*
-   * Le pion a bouclé son tour : il peut entrer chez lui — ou passer devant sa
-   * porte et repartir pour un tour complet.
+   * Arrivé à son seuil, le pion peut entrer chez lui — ou passer devant et
+   * repartir pour un tour complet.
    *
    * Rien ne l'y oblige, et c'est parfois le bon choix : un pion qui reste sur
    * le circuit continue de menacer, tandis qu'un pion rentré ne sert plus qu'à
-   * compter. On ne retourne donc plus ici : l'avance ordinaire s'ajoute plus
+   * compter. On ne retourne donc pas ici : l'avance ordinaire s'ajoute plus
    * bas, et le pion recommencera son tour.
    */
-  if (die >= restant && pathIsClear(state, spot.square, restant - 1, pawn.owner, sixes)) {
-    const step = die - restant;
-
-    if (step === HOME_LENGTH) {
+  if (
+    caseAllee >= 0 &&
+    caseAllee <= HOME_LENGTH &&
+    pathIsClear(state, spot.square, versSeuil, pawn.owner, sixes)
+  ) {
+    if (caseAllee === HOME_LENGTH) {
       moves.push({ kind: 'home', pawn: index, die, to: { zone: 'finished' } });
-    } else if (step < HOME_LENGTH) {
+    } else {
       const occupe = state.pawns.some(
         (p) =>
           p.spot.zone === 'home' &&
           p.spot.host === pawn.owner &&
-          p.spot.step === step,
+          p.spot.step === caseAllee,
       );
       if (!occupe) {
         moves.push({
           kind: 'home',
           pawn: index,
           die,
-          to: { zone: 'home', host: pawn.owner, step },
+          to: { zone: 'home', host: pawn.owner, step: caseAllee },
         });
       }
     }
@@ -509,12 +536,11 @@ const movesForPawn = (
     const step = die - jusquAuSeuil - 1;
 
     /*
-     * On n'entre chez l'autre qu'en arrivant sur son seuil, jamais en en
-     * repartant. Depuis le seuil lui-même, bifurquer dans l'allée ramène le
-     * pion en arrière du chemin qu'il vient de prendre : `jusquAuSeuil` vaut
-     * alors zéro, et le coup est écarté.
+     * On entre en arrivant sur le seuil de l'autre, ou depuis ce seuil même :
+     * dans les deux cas le pion avance. Jamais en revanche après l'avoir
+     * dépassé — `jusquAuSeuil` vaut alors cinquante et un, et aucun dé n'y
+     * suffit. Ce refus tient tout seul, sans garde supplémentaire.
      */
-    if (jusquAuSeuil < 1 || jusquAuSeuil >= die) continue;
     if (step < 0 || step >= HOME_LENGTH) continue;
     if (!pathIsClear(state, spot.square, jusquAuSeuil, pawn.owner, sixes)) continue;
 
@@ -558,6 +584,8 @@ export const legalLudoMoves = (state: LudoState): LudoMove[] => {
 
   for (const die of valeurs) {
     for (let i = 0; i < state.pawns.length; i++) {
+      // Le pion qui vient de prendre a fini son lancer.
+      if (i === state.lockedPawn) continue;
       moves.push(...movesForPawn(state, i, die, state.sixesThisTurn));
     }
   }
@@ -586,6 +614,8 @@ export const rollInto = (state: LudoState, dice: readonly number[]): LudoState =
     ...state,
     dice: [...dice],
     rolled: [...dice],
+    // Un nouveau lancer libère le pion qui avait pris au précédent.
+    lockedPawn: null,
     // Les six s'ajoutent à ceux du tour : c'est ce qui permet d'en réunir trois
     // ou quatre, un lancer après l'autre.
     sixesThisTurn: state.sixesThisTurn + dice.filter((die) => die === 6).length,
@@ -636,6 +666,16 @@ export const playLudoMove = (state: LudoState, move: LudoMove): LudoState => {
   pawns[move.pawn] = { ...mover, spot: move.to };
 
   const dice = withoutOneDie(state.dice, move.die);
+
+  // Qui prend ne rejoue pas de ce lancer. Le verrou tient jusqu'au suivant,
+  // même si un autre pion joue le dé restant entre-temps.
+  const lockedPawn = move.captures?.length ? move.pawn : state.lockedPawn;
+
+  /*
+   * Une seule façon de gagner : avoir rentré ses quatre pions. Ni l'avance, ni
+   * le nombre de prisonniers, ni l'épuisement des autres n'y changent rien —
+   * un joueur dépouillé de tous ses pions n'a pas perdu, il les fera ressortir.
+   */
   const gagne = countFinished(pawns, state.current) === PIECES_PER_PLAYER;
 
   if (gagne) {
@@ -643,11 +683,12 @@ export const playLudoMove = (state: LudoState, move: LudoMove): LudoState => {
       ...state,
       pawns,
       dice: [],
+      lockedPawn,
       status: { kind: 'win', winner: state.current },
     };
   }
 
-  return { ...state, pawns, dice };
+  return { ...state, pawns, dice, lockedPawn };
 };
 
 const countFinished = (pawns: readonly Pawn[], player: LudoPlayerId): number =>
@@ -705,6 +746,7 @@ export const endTurn = (state: LudoState, again: boolean): LudoState => {
     ...state,
     dice: [],
     rolled: [],
+    lockedPawn: null,
     // Une relance poursuit le même tour : les six déjà réunis restent acquis.
     sixesThisTurn: again ? state.sixesThisTurn : 0,
     current: again ? state.current : nextPlayer(state),
