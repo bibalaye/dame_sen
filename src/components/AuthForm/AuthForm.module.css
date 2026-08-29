@@ -1,0 +1,114 @@
+/*
+ * Le formulaire d'entrée. Ces règles servaient à la fenêtre « compte » ; elles
+ * suivent le formulaire, qui s'affiche maintenant aussi en pleine page.
+ */
+
+
+/* --- Formulaire ----------------------------------------------------------- */
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding: 5px;
+  border-radius: 14px;
+  background: var(--surface-sunk);
+}
+
+.tab {
+  padding: 11px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.tabOn {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+}
+
+.tab:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.field {
+  margin-bottom: 14px;
+  text-align: left;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.field input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 4px;
+  font-size: 1rem;
+}
+
+/* La reprise est cochée par défaut : perdre sa progression en créant un compte
+   serait le contraire de ce que le joueur demande. */
+.keep {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-sunk);
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.keep input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  accent-color: var(--green-deep);
+}
+
+.error {
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  border: 2px solid var(--red);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--red) 12%, var(--surface));
+  color: var(--red);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.action {
+  width: 100%;
+  min-height: 58px;
+  margin-top: 4px;
+  font-size: 0.98rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* Deux actions empilées ne doivent pas se toucher. */
+.action + .action {
+  margin-top: 10px;
+}

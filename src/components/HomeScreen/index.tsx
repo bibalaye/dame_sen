@@ -6,9 +6,11 @@ import StatsPanel from '../StatsPanel';
 import Shop from '../Shop';
 import RulesPicker from '../RulesPicker';
 import AccountPanel from '../AccountPanel';
+import FriendsPanel from '../FriendsPanel';
 import { computeStats } from '@/lib/history';
 import { useGameContext, type GameKind, type GameMode } from '@/context/GameContext';
 import { useAccount } from '@/context/AccountContext';
+import { useFriends } from '@/context/FriendsContext';
 import { TIME_CONTROLS, type TimeControl } from '@/lib/clock';
 import { MORPION_OPPONENTS, type MorpionVariant } from '@/lib/morpion';
 import { DEFAULT_RULES, type RuleSet } from '@/lib/engine';
@@ -124,11 +126,18 @@ const Level: React.FC<{ value: number; total: number }> = ({ value, total }) => 
 const HomeScreen: React.FC = () => {
   const { startGame, history, pieceSet, wallet } = useGameContext();
   const { account } = useAccount();
+  const { lists } = useFriends();
+
   const [accountOpen, setAccountOpen] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [rules, setRules] = useState<RuleSet>(DEFAULT_RULES);
+
+  // Les demandes reçues se comptent sur le bouton : sans cela, personne
+  // n'ouvrirait la fenêtre pour vérifier.
+  const demandes = lists.received.length;
 
   const stats = useMemo(() => computeStats(history), [history]);
 
@@ -177,6 +186,20 @@ const HomeScreen: React.FC = () => {
         <header className={styles.header}>
           <p className={styles.brand}>Teraanga Games</p>
           <h1 className={styles.title}>Jeux de plateau du Sénégal</h1>
+
+          {/* Les amis d'abord : c'est de là que part une partie à deux, et une
+              demande en attente doit se voir sans ouvrir la fenêtre. */}
+          <button
+            type="button"
+            className={`uiRound ${styles.friends}`}
+            onClick={() => setFriendsOpen(true)}
+            aria-label={
+              demandes > 0 ? `Amis, ${demandes} demande(s) en attente` : 'Mes amis'
+            }
+          >
+            <Image src="/assets/ui/icon-check.png" alt="" width={17} height={17} />
+            {demandes > 0 && <span className={styles.badge}>{demandes}</span>}
+          </button>
 
           {/* Le compte se tient à l'écart du parcours de jeu : visible, jamais
               sur le chemin de qui veut seulement lancer une partie. */}
@@ -384,6 +407,7 @@ const HomeScreen: React.FC = () => {
       </div>
 
       {accountOpen && <AccountPanel onClose={() => setAccountOpen(false)} />}
+      {friendsOpen && <FriendsPanel onClose={() => setFriendsOpen(false)} />}
       {statsOpen && <StatsPanel onClose={() => setStatsOpen(false)} />}
       {shopOpen && <Shop onClose={() => setShopOpen(false)} />}
       {rulesOpen && (

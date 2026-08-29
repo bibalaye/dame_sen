@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useAccount } from '@/context/AccountContext';
+import FriendsPanel from '../FriendsPanel';
 import { useGameContext } from '@/context/GameContext';
 import styles from './MultiplayerMenu.module.css';
 
@@ -18,6 +19,7 @@ const MultiplayerMenu: React.FC = () => {
     isConnecting,
     connectionError,
     startGame,
+    kind,
   } = useGameContext();
 
   // Un joueur connecté ne retape pas son pseudo : c'est celui de son compte
@@ -29,6 +31,7 @@ const MultiplayerMenu: React.FC = () => {
     invitedRoom ? 'join' : 'main',
   );
   const [copied, setCopied] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
 
   /** Le lien complet à envoyer : le destinataire arrive dans la salle. */
   const inviteLink = () =>
@@ -100,12 +103,34 @@ const MultiplayerMenu: React.FC = () => {
           Code de la salle :{' '}
           <span className={styles.roomCode}>{roomId}</span>
         </p>
-        <button type="button" className={`uiButton ${styles.btn}`} onClick={handleInvite}>
+        {/* Inviter un ami d'abord : c'est le geste le plus court, et il ne
+            demande de passer par aucune autre application. */}
+        <button
+          type="button"
+          className={`uiButton ${styles.btn}`}
+          onClick={() => setFriendsOpen(true)}
+        >
+          Inviter un ami
+        </button>
+
+        <button
+          type="button"
+          className={`uiButton uiButtonNeutral ${styles.btn}`}
+          onClick={handleInvite}
+        >
           {copied ? 'Lien copié !' : 'Inviter par lien'}
         </button>
         <p className={styles.hint}>
-          Le lien ouvre la partie directement — plus besoin de dicter le code.
+          Un ami reçoit l’invitation dans le jeu ; le lien sert pour quelqu’un
+          qui n’a pas encore de compte.
         </p>
+
+        {friendsOpen && (
+          <FriendsPanel
+            onClose={() => setFriendsOpen(false)}
+            room={{ id: roomId, game: kind }}
+          />
+        )}
         {isWaitingForOpponent ? (
           <p className={styles.waiting}>En attente d&apos;un adversaire…</p>
         ) : (

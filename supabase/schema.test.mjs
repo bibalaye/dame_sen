@@ -668,3 +668,326 @@ describe('le serveur et le client disent la même chose', () => {
     }
   });
 });
+
+describe('recherche de joueurs', () => {
+  test('on trouve par le début du pseudo', async () => {
+    await nouveauJoueur('mareme');
+    await nouveauJoueur('marieme');
+    await nouveauJoueur('ousseynou');
+
+    const { rows } = await db.query('select * from public.search_players($1)', ['mar']);
+    const trouves = rows.map((r) => r.handle);
+
+    assert.ok(trouves.includes('mareme'));
+    assert.ok(trouves.includes('marieme'));
+    assert.ok(!trouves.includes('ousseynou'));
+  });
+
+  test('on ne se trouve jamais soi-même', async () => {
+    await nouveauJoueur('babacar');
+    const { rows } = await db.query('select * from public.search_players($1)', ['babacar']);
+
+    assert.ok(!rows.some((r) => r.handle === 'babacar'));
+  });
+
+  test('une seule lettre ne cherche rien', async () => {
+    await nouveauJoueur('zator');
+    const { rows } = await db.query('select * from public.search_players($1)', ['z']);
+
+    assert.equal(rows.length, 0, 'sans quoi une lettre listerait la moitié des joueurs');
+  });
+
+  test('la recherche ne laisse filtrer aucun solde', async () => {
+    await nouveauJoueur('kine');
+    const { rows } = await db.query('select * from public.search_players($1)', ['ki']);
+
+    for (const row of rows) {
+      assert.deepEqual(
+        Object.keys(row).sort(),
+        ['display_name', 'frame', 'handle', 'title'],
+        'seul ce que le classement montre déjà doit sortir',
+      );
+    }
+  });
+});
+
+describe('amitiés', () => {
+  /** Deux comptes prêts à s'ajouter. */
+  const deuxJoueurs = async (a, b) => {
+    const uidA = await nouveauJoueur(a);
+    const uidB = await nouveauJoueur(b);
+    return { uidA, uidB };
+  };
+
+  const demander = (handle) =>
+    db.query('select public.send_friend_request($1) as r', [handle]);
+
+  const lister = async () => {
+    const { rows } = await db.query('select public.list_friends() as r');
+    return rows[0].r;
+  };
+
+  test('une demande reste en attente', async () => {
+    const { uidA } = await deuxJoueurs('anta', 'birane');
+    await seConnecter(uidA);
+    const { rows } = await demander('birane');
+
+    assert.equal(rows[0].r.status, 'pending');
+    assert.equal((await lister()).sent.length, 1);
+    assert.equal((await lister()).friends.length, 0);
+  });
+
+  test('le destinataire voit la demande arriver', async () => {
+    const { uidA, uidB } = await deuxJoueurs('codou', 'daouda');
+    await seConnecter(uidA);
+    await demander('daouda');
+
+    await seConnecter(uidB);
+    const listeB = await lister();
+
+    assert.equal(listeB.received.length, 1);
+    assert.equal(listeB.received[0].handle, 'codou');
+  });
+
+  test('accepter lie les deux joueurs', async () => {
+    const { uidA, uidB } = await deuxJoueurs('elhadji', 'fatima');
+    await seConnecter(uidA);
+    await demander('fatima');
+
+    await seConnecter(uidB);
+    await db.query('select public.respond_friend_request($1, $2)', ['elhadji', true]);
+
+    const listeB = await lister();
+    assert.equal(listeB.friends.length, 1);
+    assert.equal(listeB.received.length, 0);
+
+    // L'amitié vaut dans les deux sens, sans seconde ligne à tenir à jour.
+    await seConnecter(uidA);
+    const listeA = await lister();
+    assert.equal(listeA.friends.length, 1);
+    assert.equal(listeA.friends[0].handle, 'fatima');
+  });
+
+  test('refuser efface la demande sans lier personne', async () => {
+    const { uidA, uidB } = await deuxJoueurs('gora', 'hawa');
+    await seConnecter(uidA);
+    await demander('hawa');
+
+    await seConnecter(uidB);
+    await db.query('select public.respond_friend_request($1, $2)', ['gora', false]);
+
+    assert.equal((await lister()).friends.length, 0);
+    assert.equal((await lister()).received.length, 0);
+
+    await seConnecter(uidA);
+    assert.equal((await lister()).sent.length, 0);
+  });
+
+  test('deux demandes croisées valent acceptation', async () => {
+    const { uidA, uidB } = await deuxJoueurs('ismaila', 'jamila');
+    await seConnecter(uidA);
+    await demander('jamila');
+
+    // Jamila ne voit pas la demande et envoie la sienne : les faire s'attendre
+    // l'un l'autre serait absurde.
+    await seConnecter(uidB);
+    const { rows } = await demander('ismaila');
+
+    assert.equal(rows[0].r.status, 'accepted');
+    assert.equal((await lister()).friends.length, 1);
+  });
+
+  test('on ne peut pas accepter sa propre demande', async () => {
+    const { uidA } = await deuxJoueurs('khadim', 'lamine');
+    await seConnecter(uidA);
+    await demander('lamine');
+
+    // Amadou tente de répondre à la place de Lamine.
+    await db.query('select public.respond_friend_request($1, $2)', ['lamine', true]);
+
+    assert.equal((await lister()).friends.length, 0, 'rien ne doit avoir été lié');
+  });
+
+  test('on ne s’ajoute pas soi-même', async () => {
+    const uid = await nouveauJoueur('mansour');
+    await seConnecter(uid);
+    await assert.rejects(() => demander('mansour'), /pas soi meme/);
+  });
+
+  test('un pseudo inconnu est refusé', async () => {
+    const uid = await nouveauJoueur('ndongo');
+    await seConnecter(uid);
+    await assert.rejects(() => demander('personne_du_tout'), /introuvable/);
+  });
+
+  test('redemander ne crée pas de doublon', async () => {
+    const { uidA } = await deuxJoueurs('oumy', 'pathe');
+    await seConnecter(uidA);
+    await demander('pathe');
+    await demander('pathe');
+
+    assert.equal((await lister()).sent.length, 1);
+  });
+
+  test('retirer un ami vaut des deux côtés', async () => {
+    const { uidA, uidB } = await deuxJoueurs('rokhaya', 'saliou');
+    await seConnecter(uidA);
+    await demander('saliou');
+    await seConnecter(uidB);
+    await db.query('select public.respond_friend_request($1, $2)', ['rokhaya', true]);
+
+    await db.query('select public.remove_friend($1)', ['rokhaya']);
+    assert.equal((await lister()).friends.length, 0);
+
+    await seConnecter(uidA);
+    assert.equal((await lister()).friends.length, 0, 'l’autre non plus n’a plus d’ami');
+  });
+});
+
+describe('invitations à jouer', () => {
+  /** Deux amis déjà liés, prêts à s'inviter. */
+  const deuxAmis = async (a, b) => {
+    const uidA = await nouveauJoueur(a);
+    const uidB = await nouveauJoueur(b);
+
+    await seConnecter(uidA);
+    await db.query('select public.send_friend_request($1)', [b]);
+    await seConnecter(uidB);
+    await db.query('select public.respond_friend_request($1, $2)', [a, true]);
+
+    return { uidA, uidB };
+  };
+
+  const invites = async () => {
+    const { rows } = await db.query('select public.pending_invites() as r');
+    return rows[0].r;
+  };
+
+  test('un ami reçoit le code de la salle', async () => {
+    const { uidA, uidB } = await deuxAmis('tabara', 'useynu');
+    await seConnecter(uidA);
+    await db.query('select public.invite_friend($1, $2, $3)', ['useynu', 'ABC123', 'dames']);
+
+    await seConnecter(uidB);
+    const recues = await invites();
+
+    assert.equal(recues.length, 1);
+    assert.equal(recues[0].roomId, 'ABC123');
+    assert.equal(recues[0].game, 'dames');
+    assert.equal(recues[0].handle, 'tabara');
+  });
+
+  test('on n’invite que ses amis', async () => {
+    const uidA = await nouveauJoueur('vieux');
+    await nouveauJoueur('waly');
+    await seConnecter(uidA);
+
+    await assert.rejects(
+      () => db.query('select public.invite_friend($1, $2, $3)', ['waly', 'ABC123', 'dames']),
+      /pas ami/,
+      'sans quoi n’importe qui ferait sonner l’écran de n’importe qui',
+    );
+  });
+
+  test('cliquer trois fois ne fait pas sonner trois fois', async () => {
+    const { uidA, uidB } = await deuxAmis('yande', 'zator2');
+    await seConnecter(uidA);
+    for (const salle of ['AAA111', 'BBB222', 'CCC333']) {
+      await db.query('select public.invite_friend($1, $2, $3)', ['zator2', salle, 'dames']);
+    }
+
+    await seConnecter(uidB);
+    const recues = await invites();
+
+    assert.equal(recues.length, 1, 'une seule invitation en attente par paire');
+    assert.equal(recues[0].roomId, 'CCC333', 'la plus récente');
+  });
+
+  test('l’expéditeur ne voit pas sa propre invitation dans ses reçues', async () => {
+    const { uidA } = await deuxAmis('adja', 'bara');
+    await seConnecter(uidA);
+    await db.query('select public.invite_friend($1, $2, $3)', ['bara', 'XYZ789', 'morpion']);
+
+    assert.equal((await invites()).length, 0);
+  });
+
+  test('une invitation se referme', async () => {
+    const { uidA, uidB } = await deuxAmis('cheikhouna', 'diarra');
+    await seConnecter(uidA);
+    await db.query('select public.invite_friend($1, $2, $3)', ['diarra', 'QWE456', 'dames']);
+
+    await seConnecter(uidB);
+    const recues = await invites();
+    await db.query('select public.dismiss_invite($1)', [recues[0].id]);
+
+    assert.equal((await invites()).length, 0);
+  });
+
+  test('on ne referme pas l’invitation d’un autre', async () => {
+    const { uidA, uidB } = await deuxAmis('elimane', 'fary');
+    await seConnecter(uidA);
+    await db.query('select public.invite_friend($1, $2, $3)', ['fary', 'RTY123', 'dames']);
+
+    await seConnecter(uidB);
+    const recues = await invites();
+
+    // L'expéditeur tente d'effacer l'invitation reçue par l'autre.
+    await seConnecter(uidA);
+    await db.query('select public.dismiss_invite($1)', [recues[0].id]);
+
+    await seConnecter(uidB);
+    assert.equal((await invites()).length, 1, 'elle est toujours là');
+  });
+
+  test('une invitation périmée ne s’affiche plus', async () => {
+    const { uidA, uidB } = await deuxAmis('gorgui', 'houleye');
+    await seConnecter(uidA);
+    await db.query('select public.invite_friend($1, $2, $3)', ['houleye', 'OLD999', 'dames']);
+
+    // On la vieillit de vingt minutes : la fenêtre est de dix.
+    await db.query(
+      "update public.game_invites set created_at = now() - interval '20 minutes' where to_id = $1",
+      [uidB],
+    );
+
+    await seConnecter(uidB);
+    assert.equal((await invites()).length, 0);
+  });
+
+  test('un jeu inconnu est refusé', async () => {
+    const { uidA } = await deuxAmis('ibou', 'jules');
+    await seConnecter(uidA);
+
+    await assert.rejects(
+      () => db.query('select public.invite_friend($1, $2, $3)', ['jules', 'AAA111', 'echecs']),
+      /jeu inconnu/,
+    );
+  });
+});
+
+describe('verrouillage des amitiés', () => {
+  test('aucune écriture directe n’est ouverte au client', async () => {
+    const { rows } = await db.query(`
+      select tablename, cmd
+      from pg_policies
+      where schemaname = 'public'
+        and tablename in ('friendships', 'game_invites')
+        and cmd <> 'SELECT'
+    `);
+    assert.deepEqual(rows, [], 'tout doit passer par les fonctions');
+  });
+
+  test('anon ne peut exécuter aucune fonction sociale', async () => {
+    const { rows } = await db.query(`
+      select p.proname
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname in ('search_players', 'send_friend_request', 'respond_friend_request',
+                          'remove_friend', 'list_friends', 'invite_friend',
+                          'pending_invites', 'dismiss_invite')
+        and has_function_privilege('anon', p.oid, 'execute')
+    `);
+    assert.deepEqual(rows, [], 'aucune ne doit être ouverte à un visiteur anonyme');
+  });
+});

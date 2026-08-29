@@ -682,3 +682,384 @@ grant execute on function public.set_loadout(text, text, text, text) to authenti
 grant execute on function public.import_local_progress(integer, jsonb) to authenticated;
 
 grant select on public.catalog to anon, authenticated;
+
+-- =============================================================================
+-- Amis et invitations
+-- =============================================================================
+--
+-- Partager un code de salle à six caractères marchait, mais demandait de passer
+-- par une autre application pour l'envoyer. Une liste d'amis permet d'inviter
+-- en un geste, depuis le jeu.
+-- =============================================================================
+
+-- Une seule ligne par paire, quel que soit qui a demandé. Chercher une amitié
+-- se fait donc dans les deux sens — c'est le prix d'une table sans doublon, et
+-- il vaut mieux que deux lignes à garder d'accord.
+create table if not exists public.friendships (
+  requester_id uuid not null references public.profiles(id) on delete cascade,
+  addressee_id uuid not null references public.profiles(id) on delete cascade,
+  status text not null default 'pending' check (status in ('pending', 'accepted')),
+  created_at timestamptz not null default now(),
+
+  primary key (requester_id, addressee_id),
+  constraint pas_ami_avec_soi_meme check (requester_id <> addressee_id)
+);
+
+create index if not exists friendships_addressee_idx
+  on public.friendships (addressee_id, status);
+
+/* Invitations à rejoindre une salle. Le code de salle vient du serveur de
+   parties, qui ne connaît pas les comptes : cette table fait le lien entre les
+   deux, sans que l'un ait à connaître l'autre. */
+create table if not exists public.game_invites (
+  id uuid primary key default gen_random_uuid(),
+  from_id uuid not null references public.profiles(id) on delete cascade,
+  to_id uuid not null references public.profiles(id) on delete cascade,
+  room_id text not null,
+  game text not null check (game in ('dames', 'morpion')),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists game_invites_to_idx
+  on public.game_invites (to_id, created_at desc);
+
+alter table public.friendships enable row level security;
+alter table public.game_invites enable row level security;
+
+drop policy if exists "amities visibles par les deux" on public.friendships;
+create policy "amities visibles par les deux"
+  on public.friendships for select
+  using (auth.uid() = requester_id or auth.uid() = addressee_id);
+
+drop policy if exists "invitations visibles par les deux" on public.game_invites;
+create policy "invitations visibles par les deux"
+  on public.game_invites for select
+  using (auth.uid() = to_id or auth.uid() = from_id);
+
+-- Le client doit être prévenu d'une invitation sans interroger le serveur en
+-- boucle. Sans cette publication, l'abonnement temps réel ne reçoit rien.
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1 from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public' and tablename = 'game_invites'
+     )
+  then
+    alter publication supabase_realtime add table public.game_invites;
+  end if;
+end $$;
+
+-- --- Recherche ---------------------------------------------------------------
+
+/* Cherche un joueur par son pseudo. On n'expose que ce que le classement montre
+   déjà, jamais un solde ni un identifiant de compte. Deux caractères au
+   minimum : sans cela, une seule lettre listerait la moitié des joueurs. */
+create or replace function public.search_players(p_query text)
+returns table (handle text, display_name text, title text, frame text)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_q text := lower(trim(coalesce(p_query, '')));
+begin
+  if v_uid is null then
+    raise exception 'non authentifie';
+  end if;
+  if length(v_q) < 2 then
+    return;
+  end if;
+
+  return query
+    select p.handle, p.display_name, p.title, p.frame
+    from public.profiles p
+    where p.id <> v_uid
+      and p.handle like v_q || '%'
+    order by p.handle
+    limit 10;
+end;
+$$;
+
+-- --- Demandes d'amitié -------------------------------------------------------
+
+create or replace function public.send_friend_request(p_handle text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_autre uuid;
+  v_existant public.friendships;
+begin
+  if v_uid is null then
+    raise exception 'non authentifie';
+  end if;
+
+  select id into v_autre from public.profiles where handle = lower(p_handle);
+  if v_autre is null then
+    raise exception 'joueur introuvable';
+  end if;
+  if v_autre = v_uid then
+    raise exception 'pas soi meme';
+  end if;
+
+  select * into v_existant from public.friendships
+    where (requester_id = v_uid and addressee_id = v_autre)
+       or (requester_id = v_autre and addressee_id = v_uid);
+
+  if found then
+    -- L'autre avait déjà demandé : sa demande vaut acceptation, plutôt que de
+    -- laisser deux personnes s'attendre l'une l'autre.
+    if v_existant.status = 'pending' and v_existant.requester_id = v_autre then
+      update public.friendships set status = 'accepted'
+        where requester_id = v_autre and addressee_id = v_uid;
+      return jsonb_build_object('status', 'accepted');
+    end if;
+    return jsonb_build_object('status', v_existant.status);
+  end if;
+
+  insert into public.friendships (requester_id, addressee_id)
+  values (v_uid, v_autre);
+
+  return jsonb_build_object('status', 'pending');
+end;
+$$;
+
+create or replace function public.respond_friend_request(
+  p_handle text,
+  p_accept boolean
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_autre uuid;
+begin
+  if v_uid is null then
+    raise exception 'non authentifie';
+  end if;
+
+  select id into v_autre from public.profiles where handle = lower(p_handle);
+  if v_autre is null then
+    raise exception 'joueur introuvable';
+  end if;
+
+  -- On ne répond qu'aux demandes reçues : accepter à la place de l'autre
+  -- reviendrait à s'ajouter soi-même à sa liste.
+  if p_accept then
+    update public.friendships set status = 'accepted'
+      where requester_id = v_autre and addressee_id = v_uid and status = 'pending';
+  else
+    delete from public.friendships
+      where requester_id = v_autre and addressee_id = v_uid and status = 'pending';
+  end if;
+
+  return jsonb_build_object('accepted', p_accept);
+end;
+$$;
+
+create or replace function public.remove_friend(p_handle text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_autre uuid;
+begin
+  if v_uid is null then
+    raise exception 'non authentifie';
+  end if;
+
+  select id into v_autre from public.profiles where handle = lower(p_handle);
+  if v_autre is null then
+    raise exception 'joueur introuvable';
+  end if;
+
+  delete from public.friendships
+    where (requester_id = v_uid and addressee_id = v_autre)
+       or (requester_id = v_autre and addressee_id = v_uid);
+
+  return jsonb_build_object('removed', true);
+end;
+$$;
+
+/* La liste, en un seul appel : les amis, les demandes reçues, les demandes
+   envoyées. Trois requêtes séparées obligeraient l'écran à trois allers-retours
+   pour afficher une seule fenêtre. */
+create or replace function public.list_friends()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'non authentifie';
+  end if;
+
+  return jsonb_build_object(
+    'friends', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'handle', p.handle, 'displayName', p.display_name,
+        'title', p.title, 'frame', p.frame
+      ) order by p.handle)
+      from public.friendships f
+      join public.profiles p
+        on p.id = case when f.requester_id = v_uid then f.addressee_id else f.requester_id end
+      where f.status = 'accepted'
+        and (f.requester_id = v_uid or f.addressee_id = v_uid)
+    ), '[]'::jsonb),
+
+    'received', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'handle', p.handle, 'displayName', p.display_name,
+        'title', p.title, 'frame', p.frame
+      ) order by p.handle)
+      from public.friendships f
+      join public.profiles p on p.id = f.requester_id
+      where f.status = 'pending' and f.addressee_id = v_uid
+    ), '[]'::jsonb),
+
+    'sent', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'handle', p.handle, 'displayName', p.display_name,
+        'title', p.title, 'frame', p.frame
+      ) order by p.handle)
+      from public.friendships f
+      join public.profiles p on p.id = f.addressee_id
+      where f.status = 'pending' and f.requester_id = v_uid
+    ), '[]'::jsonb)
+  );
+end;
+$$;
+
+-- --- Invitations à jouer -----------------------------------------------------
+
+/* Invite un ami dans une salle déjà créée. Réservé aux amis : sans cela,
+   n'importe qui pourrait faire sonner l'écran de n'importe qui. */
+create or replace function public.invite_friend(
+  p_handle text,
+  p_room text,
+  p_game text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_autre uuid;
+begin
+  if v_uid is null then
+    raise exception 'non authentifie';
+  end if;
+  if p_game not in ('dames', 'morpion') then
+    raise exception 'jeu inconnu';
+  end if;
+
+  select id into v_autre from public.profiles where handle = lower(p_handle);
+  if v_autre is null then
+    raise exception 'joueur introuvable';
+  end if;
+
+  if not exists (
+    select 1 from public.friendships
+    where status = 'accepted'
+      and ((requester_id = v_uid and addressee_id = v_autre)
+        or (requester_id = v_autre and addressee_id = v_uid))
+  ) then
+    raise exception 'pas ami';
+  end if;
+
+  -- Une invitation ne vaut que le temps qu'on reste devant l'écran. Purger ici
+  -- évite une tâche planifiée pour une table qui reste minuscule.
+  delete from public.game_invites where created_at < now() - interval '10 minutes';
+
+  -- Une seule invitation en attente par paire : cliquer trois fois ne doit pas
+  -- faire sonner trois fois.
+  delete from public.game_invites where from_id = v_uid and to_id = v_autre;
+
+  insert into public.game_invites (from_id, to_id, room_id, game)
+  values (v_uid, v_autre, left(p_room, 12), p_game);
+
+  return jsonb_build_object('sent', true);
+end;
+$$;
+
+/* Les invitations reçues encore valables, avec le nom de qui les envoie. */
+create or replace function public.pending_invites()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'non authentifie';
+  end if;
+
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'id', i.id, 'roomId', i.room_id, 'game', i.game,
+      'handle', p.handle, 'displayName', p.display_name
+    ) order by i.created_at desc)
+    from public.game_invites i
+    join public.profiles p on p.id = i.from_id
+    where i.to_id = v_uid
+      and i.created_at > now() - interval '10 minutes'
+  ), '[]'::jsonb);
+end;
+$$;
+
+create or replace function public.dismiss_invite(p_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then
+    raise exception 'non authentifie';
+  end if;
+
+  delete from public.game_invites where id = p_id and to_id = v_uid;
+  return jsonb_build_object('dismissed', true);
+end;
+$$;
+
+-- --- Droits ------------------------------------------------------------------
+
+revoke all on function public.search_players(text) from public, anon;
+revoke all on function public.send_friend_request(text) from public, anon;
+revoke all on function public.respond_friend_request(text, boolean) from public, anon;
+revoke all on function public.remove_friend(text) from public, anon;
+revoke all on function public.list_friends() from public, anon;
+revoke all on function public.invite_friend(text, text, text) from public, anon;
+revoke all on function public.pending_invites() from public, anon;
+revoke all on function public.dismiss_invite(uuid) from public, anon;
+
+grant execute on function public.search_players(text) to authenticated;
+grant execute on function public.send_friend_request(text) to authenticated;
+grant execute on function public.respond_friend_request(text, boolean) to authenticated;
+grant execute on function public.remove_friend(text) to authenticated;
+grant execute on function public.list_friends() to authenticated;
+grant execute on function public.invite_friend(text, text, text) to authenticated;
+grant execute on function public.pending_invites() to authenticated;
+grant execute on function public.dismiss_invite(uuid) to authenticated;

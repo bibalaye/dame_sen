@@ -4,6 +4,7 @@ import "./globals.css";
 import { GameProvider } from '@/context/GameContext';
 import { SocketProvider } from '@/context/SocketContext';
 import { AccountProvider } from '@/context/AccountContext';
+import { FriendsProvider } from '@/context/FriendsContext';
 import ServiceWorker from '@/components/ServiceWorker';
 
 const geistSans = Geist({
@@ -72,12 +73,14 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AccountProvider>
-          <SocketProvider>
-            <GameProvider>
-              {children}
-              <ServiceWorker />
-            </GameProvider>
-          </SocketProvider>
+          <FriendsProvider>
+            <SocketProvider>
+              <GameProvider>
+                {children}
+                <ServiceWorker />
+              </GameProvider>
+            </SocketProvider>
+          </FriendsProvider>
         </AccountProvider>
       </body>
     </html>

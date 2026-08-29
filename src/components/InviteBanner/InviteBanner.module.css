@@ -1,0 +1,103 @@
+/*
+ * L'invitation reçue. Elle descend du haut de l'écran et s'y tient : assez
+ * visible pour qu'on la remarque, assez discrète pour qu'on puisse finir son
+ * coup avant d'y répondre.
+ */
+
+.banner {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(440px, calc(100vw - 20px));
+  padding: 12px 14px;
+
+  border: 2px solid var(--brass);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-lift);
+
+  animation: descendre 0.28s ease-out;
+}
+
+@keyframes descendre {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -14px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner {
+    animation: none;
+  }
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.who,
+.what {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.who {
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.who strong {
+  color: var(--brass-ink);
+}
+
+.what {
+  margin-top: 2px;
+  font-size: 0.74rem;
+  color: var(--text-soft);
+}
+
+.actions {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.join,
+.later {
+  min-height: 40px;
+  padding: 0 13px;
+  font-size: 0.76rem;
+}
+
+/* Sur un écran étroit, les deux boutons passent sous le texte plutôt que de le
+   réduire à trois lettres. */
+@media (max-width: 400px) {
+  .banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .actions {
+    justify-content: stretch;
+  }
+
+  .join,
+  .later {
+    flex: 1;
+  }
+}

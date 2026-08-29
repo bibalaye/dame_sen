@@ -1,12 +1,16 @@
 # Comptes joueurs — mise en service
 
-Le jeu fonctionne entièrement sans compte. Cette page explique comment activer
-les comptes, ce qui permet à un joueur de retrouver ses cauris, son historique
-et ses pions sur un autre appareil.
+**Le compte est requis pour jouer.** La progression, le classement et les amis
+n'existent qu'attachés à quelqu'un : on demande donc un pseudo avant la
+première partie plutôt qu'après.
 
-Tant que les deux variables d'environnement sont vides, rien ne change : la
-progression reste dans le navigateur, et la fenêtre « compte » indique que la
-fonction n'est pas activée.
+Une exception, et une seule : tant que les deux variables d'environnement sont
+vides, aucun compte ne peut exister. Bloquer là rendrait le jeu injouable pour
+qui l'installe sans clés, alors la porte s'efface et la progression reste dans
+le navigateur.
+
+> À savoir : chaque écran avant la première partie fait partir des joueurs. Un
+> compte obligatoire est un choix assumé, pas un réglage neutre.
 
 ---
 
@@ -37,8 +41,10 @@ Il installe :
 | `profiles` | pseudo, cauris, inventaire, tenue, séries |
 | `games` | historique des parties |
 | `catalog` | prix de chaque article, miroir de `src/lib/shop.ts` |
+| `friendships` | une ligne par paire, en attente ou acceptée |
+| `game_invites` | invitations à rejoindre une salle, valables dix minutes |
 | `leaderboard` | vue du classement, sans solde ni identifiant |
-| 7 fonctions | les seules écritures autorisées |
+| 15 fonctions | les seules écritures autorisées |
 
 Si la base était installée avant la boutique, le script la reprend : `stars`
 devient `coins`, `unlocked` devient `owned`, et les identifiants d'articles
@@ -152,7 +158,7 @@ dans la fin de partie ordinaire.
 npm run test:sql
 ```
 
-46 tests exécutent le schéma dans un vrai PostgreSQL fourni par PGlite, en
+70 tests exécutent le schéma dans un vrai PostgreSQL fourni par PGlite, en
 WebAssembly : rien à installer, aucun conteneur à lancer, aucune connexion au
 projet Supabase. Ils exercent chaque chemin des fonctions — série de trois
 victoires, prime du septième jour, partie renvoyée deux fois, solde
@@ -168,11 +174,15 @@ trompe le joueur, et rien d'autre ne l'aurait signalé.
 
 ## Vérifier que tout marche
 
-1. Ouvrir le jeu, cliquer sur le bouton rond en haut à droite de l'accueil.
+1. Ouvrir le jeu : le formulaire d'inscription s'affiche avant tout le reste.
 2. Créer un compte. Si la progression de l'appareil est proposée, la reprendre.
 3. Dans Supabase, **Table Editor → profiles** : la ligne doit être là.
 4. Jouer une partie, la terminer, recharger la page : les cauris tiennent.
-5. Ouvrir le jeu dans une fenêtre privée, se connecter : la progression suit.
+5. Ouvrir le jeu dans une fenêtre privée, créer un second compte.
+6. Depuis le premier, chercher le second et l'ajouter ; l'accepter depuis le
+   second. Le bouton « amis » porte une pastille tant que la demande attend.
+7. Créer une salle en ligne, **Inviter un ami** : le bandeau doit descendre chez
+   l'autre en quelques secondes.
 
 ### Si quelque chose bloque
 
@@ -232,3 +242,61 @@ jamais rien ne joue pas un moins bon jeu.
 son pion — une promotion invisible casse la partie — ou si deux fichiers font
 double emploi. Il n'utilise que les séries `border` et `multi` : pour les
 véhicules, la série `single` n'a pas de version empilée.
+
+---
+
+## Amis et invitations
+
+Partager un code de salle à six caractères marchait, mais obligeait à sortir du
+jeu pour l'envoyer par un autre moyen. Une liste d'amis permet d'inviter d'un
+geste, et de recevoir l'invitation sans rien recopier.
+
+### Ce que ça donne
+
+1. Chercher un pseudo, envoyer une demande.
+2. L'autre l'accepte depuis le bouton « amis » de l'accueil, qui porte une
+   pastille tant qu'une demande attend.
+3. Créer une salle en ligne, puis **Inviter un ami** : la liste s'ouvre, un
+   bouton par ami.
+4. Chez l'ami, un bandeau descend du haut de l'écran : *« Amadou vous invite »*,
+   avec **Rejoindre** et **Plus tard**.
+
+### Choix de conception
+
+**Une seule ligne par paire.** Chercher une amitié se fait donc dans les deux
+sens, ce qui alourdit un peu les requêtes — mais deux lignes symétriques à tenir
+d'accord se désynchronisent tôt ou tard.
+
+**Deux demandes croisées valent acceptation.** Si chacun demande l'autre sans
+avoir vu sa demande, les faire s'attendre mutuellement serait absurde.
+
+**On n'invite que ses amis.** Sans cette règle, n'importe qui pourrait faire
+sonner l'écran de n'importe qui.
+
+**Une seule invitation en attente par paire.** Cliquer trois fois ne doit pas
+faire sonner trois fois ; la plus récente remplace les précédentes.
+
+**Les invitations expirent au bout de dix minutes**, et sont purgées à chaque
+nouvelle invitation — pas besoin d'une tâche planifiée pour une table qui reste
+minuscule.
+
+### Le temps réel
+
+Le client est prévenu par Supabase Realtime plutôt qu'en interrogeant le serveur
+en boucle. Le script ajoute `game_invites` à la publication `supabase_realtime`
+si elle existe.
+
+Si le temps réel n'est pas actif sur le projet, **rien ne casse** : le client
+relit la liste toutes les trente secondes. L'invitation arrive alors avec un peu
+de retard au lieu de ne jamais arriver.
+
+L'événement ne porte que la ligne insérée — pas le nom de qui invite, qui est
+dans une autre table. On s'en sert donc comme d'une sonnette : elle dit qu'il
+s'est passé quelque chose, et le client va lire la liste complète.
+
+### Ce qui n'est pas exposé
+
+La recherche et la liste ne rendent que ce que le classement montre déjà :
+pseudo, nom affiché, titre et cadre. Jamais un solde, jamais un identifiant de
+compte. Deux caractères au minimum pour chercher, sans quoi une seule lettre
+listerait la moitié des joueurs.

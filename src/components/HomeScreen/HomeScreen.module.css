@@ -461,3 +461,29 @@
   font-size: 1rem;
   line-height: 1;
 }
+
+/* Les amis se posent à gauche du compte, dans le même angle. */
+.friends {
+  position: absolute;
+  top: 0;
+  right: 50px;
+  width: 42px;
+  height: 42px;
+}
+
+/* Une pastille suffit à dire qu'il y a quelque chose à voir. */
+.badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 50px;
+  background: var(--red);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 19px;
+  text-align: center;
+}

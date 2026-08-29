@@ -1,6 +1,8 @@
 'use client';
 
+import AuthGate from '@/components/AuthGate';
 import GameBoard from '@/components/GameBoard';
+import InviteBanner from '@/components/InviteBanner';
 import HomeScreen from '@/components/HomeScreen';
 import Morpion from '@/components/Morpion';
 import { useGameContext } from '@/context/GameContext';
@@ -9,15 +11,20 @@ import type { MorpionDifficulty } from '@/lib/morpion';
 /**
  * Trois écrans : l'accueil, la table de dames, la grille de morpion. Le jeu
  * choisi et le mode viennent du contexte, renseignés au lancement.
+ *
+ * Tous passent par la porte d'entrée : sans compte, on ne joue pas.
  */
 export default function Page() {
   const { screen, kind, mode, difficulty, morpionVariant } = useGameContext();
 
   if (screen === 'home') {
     return (
-      <main>
-        <HomeScreen />
-      </main>
+      <AuthGate>
+        <main>
+          <InviteBanner />
+          <HomeScreen />
+        </main>
+      </AuthGate>
     );
   }
 
@@ -29,15 +36,21 @@ export default function Page() {
       difficulty === 'easy' ? 'easy' : difficulty === 'medium' ? 'medium' : 'hard';
 
     return (
-      <main>
-        <Morpion mode={localMode} difficulty={level} variant={morpionVariant} />
-      </main>
+      <AuthGate>
+        <main>
+          <InviteBanner />
+          <Morpion mode={localMode} difficulty={level} variant={morpionVariant} />
+        </main>
+      </AuthGate>
     );
   }
 
   return (
-    <main>
-      <GameBoard />
-    </main>
+    <AuthGate>
+      <main>
+        <InviteBanner />
+        <GameBoard />
+      </main>
+    </AuthGate>
   );
 }
