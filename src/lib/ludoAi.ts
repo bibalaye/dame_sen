@@ -20,7 +20,7 @@ import {
   HOME_LENGTH,
   PIECES_PER_PLAYER,
   TRACK,
-  homeGate,
+  START_SQUARE,
   legalLudoMoves,
   progressOf,
   type LudoMove,
@@ -125,7 +125,7 @@ const empile = (state: LudoState, move: LudoMove): boolean => {
 /** Vrai si l'empilement se fait à la porte du joueur, là où il protège. */
 const formeBarrage = (state: LudoState, move: LudoMove): boolean =>
   move.to.zone === 'track' &&
-  move.to.square === homeGate(state.current) &&
+  move.to.square === START_SQUARE[state.current] &&
   empile(state, move);
 
 /**

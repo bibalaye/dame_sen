@@ -236,14 +236,10 @@
   pointer-events: none;
 }
 
-/* Pendant le choix d'une destination, seule la case compte — sauf le pion
-   choisi, qu'on doit pouvoir retoucher pour changer d'avis. */
-.picking .pawn {
+/* Sur une case d'arrivée, les pions s'effacent devant elle : c'est la case
+   qu'on vise, et le pion qui s'y trouve est justement celui qu'on va prendre. */
+.onTarget .pawn {
   pointer-events: none;
-}
-
-.picking .selected {
-  pointer-events: auto;
 }
 
 /* Un pion jouable s'éclaire : sans cela, on tâtonne à chaque lancer. */

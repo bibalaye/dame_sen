@@ -6,6 +6,8 @@ import {
   PIECES_PER_PLAYER,
   START_SQUARE,
   TRACK,
+  blockadeOwner,
+  blockadeSize,
   createLudoGame,
   earnsExtraRoll,
   endTurn,
@@ -213,22 +215,30 @@ describe('capture : le pion devient prisonnier', () => {
 
 describe('barrages, à la porte seulement', () => {
   /*
-   * La porte du joueur 1 est la case 12 : le seul endroit où deux de ses pions
-   * forment un barrage. Un pion du joueur 0 attend en 8, à quatre cases.
+   * La porte du joueur 1 est sa case de départ, la 13 : le seul endroit où deux
+   * de ses pions forment un barrage. Un pion du joueur 0 attend en 9.
+   *
+   * C'est bien la case de départ et non le seuil de l'allée : un joueur n'a
+   * jamais deux pions sur ce seuil, puisqu'ils bifurquent chez eux dès qu'ils
+   * l'atteignent — le barrage y serait resté impossible à former.
    */
   const aLaPorte = (dice: number[]) =>
     etat(
       [
-        { owner: 0, spot: surCase(8) },
-        { owner: 1, spot: surCase(12) },
-        { owner: 1, spot: surCase(12) },
+        { owner: 0, spot: surCase(9) },
+        { owner: 1, spot: surCase(13) },
+        { owner: 1, spot: surCase(13) },
       ],
       { current: 0, dice },
     );
 
+  test('la porte est bien la case de départ', () => {
+    assert.equal(START_SQUARE[1], 13);
+  });
+
   test('la porte se ferme à deux pions', () => {
     const dessus = legalLudoMoves(aLaPorte([4, 1])).filter(
-      (m) => m.to.zone === 'track' && m.to.square === 12,
+      (m) => m.to.zone === 'track' && m.to.square === 13,
     );
 
     assert.equal(dessus.length, 0, 'on ne se pose pas sur un barrage');
@@ -236,7 +246,7 @@ describe('barrages, à la porte seulement', () => {
 
   test('le barrage arrête aussi celui qui voudrait le franchir', () => {
     const audela = legalLudoMoves(aLaPorte([5, 1])).filter(
-      (m) => m.to.zone === 'track' && m.to.square === 13,
+      (m) => m.to.zone === 'track' && m.to.square === 14,
     );
 
     assert.equal(audela.length, 0, 'un barrage ne se contourne pas : il bloque');
@@ -244,7 +254,7 @@ describe('barrages, à la porte seulement', () => {
 
   test('un double-six force le barrage', () => {
     const passe = legalLudoMoves(aLaPorte([6, 6])).filter(
-      (m) => m.to.zone === 'track' && m.to.square === 14,
+      (m) => m.to.zone === 'track' && m.to.square === 15,
     );
 
     assert.equal(passe.length, 1, 'le double-six est la seule clé');
@@ -252,7 +262,7 @@ describe('barrages, à la porte seulement', () => {
 
   test('un six seul ne suffit pas', () => {
     const passe = legalLudoMoves(aLaPorte([6, 2])).filter(
-      (m) => m.to.zone === 'track' && m.to.square === 14,
+      (m) => m.to.zone === 'track' && m.to.square === 15,
     );
 
     assert.equal(passe.length, 0);
@@ -262,10 +272,10 @@ describe('barrages, à la porte seulement', () => {
     const troisPions = (sixes: number) => {
       const base = etat(
         [
-          { owner: 0, spot: surCase(8) },
-          { owner: 1, spot: surCase(12) },
-          { owner: 1, spot: surCase(12) },
-          { owner: 1, spot: surCase(12) },
+          { owner: 0, spot: surCase(9) },
+          { owner: 1, spot: surCase(13) },
+          { owner: 1, spot: surCase(13) },
+          { owner: 1, spot: surCase(13) },
         ],
         { current: 0, dice: [6, 6] },
       );
@@ -273,7 +283,7 @@ describe('barrages, à la porte seulement', () => {
     };
 
     const passe = (state: LudoState) =>
-      legalLudoMoves(state).some((m) => m.to.zone === 'track' && m.to.square === 14);
+      legalLudoMoves(state).some((m) => m.to.zone === 'track' && m.to.square === 15);
 
     assert.ok(!passe(troisPions(2)), 'un double-six ne suffit pas contre trois pions');
     assert.ok(passe(troisPions(3)), 'le troisième six ouvre le passage');
@@ -299,40 +309,34 @@ describe('barrages, à la porte seulement', () => {
     assert.equal(state.sixesThisTurn, 0, 'le joueur suivant repart de zéro');
   });
 
-  /*
-   * Un joueur ne franchit jamais sa propre porte : elle précède sa case de
-   * départ, si bien qu'il l'atteint au terme de son tour — et y bifurque vers
-   * son allée. La question n'est donc pas de savoir s'il peut passer dessus,
-   * mais s'il peut l'occuper et la quitter.
-   */
-  test('on peut fermer sa porte en s’y posant à deux', () => {
-    // Le joueur 1 a un pion à sa porte (12) et un autre en 11, à une case.
-    const state = etat(
-      [
-        { owner: 1, spot: surCase(11) },
-        { owner: 1, spot: surCase(12) },
-      ],
-      { current: 1, dice: [1, 5] },
-    );
+  test('deux pions sortis d’écurie ferment la porte d’eux-mêmes', () => {
+    // C'est le cas courant : on sort un pion, puis un second, et tous deux se
+    // retrouvent sur la case de départ. Le barrage se forme sans rien viser.
+    const state = etat([{ owner: 1, spot: surCase(13) }], {
+      current: 1,
+      dice: [6, 2],
+    });
 
-    assert.ok(
-      legalLudoMoves(state).some((m) => m.to.zone === 'track' && m.to.square === 12),
-      'rien n’empêche de rejoindre les siens à sa porte',
-    );
+    const sortie = legalLudoMoves(state).find((m) => m.kind === 'enter');
+    assert.ok(sortie, 'le six doit sortir un second pion');
+
+    const apres = playLudoMove(state, sortie!);
+    assert.equal(blockadeOwner(apres, 13), 1, 'la porte est tenue');
+    assert.equal(blockadeSize(apres, 13), 2);
   });
 
-  test('sa propre porte ne barre pas l’entrée de son allée', () => {
+  test('le barrage ne gêne pas celui qui le tient', () => {
     const state = etat(
       [
-        { owner: 1, spot: surCase(12) },
-        { owner: 1, spot: surCase(12) },
+        { owner: 1, spot: surCase(13) },
+        { owner: 1, spot: surCase(13) },
       ],
-      { current: 1, dice: [2, 4] },
+      { current: 1, dice: [3, 1] },
     );
 
     assert.ok(
-      legalLudoMoves(state).some((m) => m.to.zone === 'home' && m.to.host === 1),
-      'un pion posté à sa porte doit pouvoir rentrer chez lui',
+      legalLudoMoves(state).some((m) => m.to.zone === 'track' && m.to.square === 16),
+      'on quitte sa porte quand on veut',
     );
   });
 
@@ -380,11 +384,12 @@ describe('empiler hors de sa porte expose les deux pions', () => {
   });
 
   test('à la porte, les deux mêmes pions sont intouchables', () => {
+    // Les mêmes deux pions, mais posés sur la case de départ du joueur 1.
     const state = etat(
       [
-        { owner: 0, spot: surCase(8) },
-        { owner: 1, spot: surCase(12) },
-        { owner: 1, spot: surCase(12) },
+        { owner: 0, spot: surCase(9) },
+        { owner: 1, spot: surCase(13) },
+        { owner: 1, spot: surCase(13) },
       ],
       { current: 0, dice: [4, 1] },
     );

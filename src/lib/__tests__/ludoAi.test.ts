@@ -210,20 +210,20 @@ describe('priorités du joueur artificiel', () => {
   });
 
   test('à sa porte, s’empiler protège', () => {
-    // La porte du joueur 0 est la case 51 ; un pion en 50 peut l'y rejoindre.
+    // La porte du joueur 0 est sa case de départ, la 0 : un six y pose un
+    // second pion, et le barrage se ferme.
     const state = etat(
       [
-        { owner: 0, spot: surCase(50) },
-        { owner: 0, spot: surCase(51) },
-        { owner: 1, spot: surCase(48) },
+        { owner: 0, spot: surCase(0) },
+        { owner: 1, spot: surCase(49) },
       ],
-      { current: 0, dice: [1, 4] },
+      { current: 0, dice: [6, 4] },
     );
 
     const barrage = legalLudoMoves(state).find(
-      (m) => m.to.zone === 'track' && m.to.square === 51,
+      (m) => m.kind === 'enter' && m.to.zone === 'track' && m.to.square === 0,
     );
-    assert.ok(barrage, 'le coup doit exister');
+    assert.ok(barrage, 'le six doit sortir un second pion sur la porte');
     assert.ok(
       scoreLudoMove(state, barrage!) > 0,
       'fermer sa porte sous la menace reste un bon coup',

@@ -179,12 +179,14 @@ export const pawnsOnSquare = (state: LudoState, square: number): Pawn[] =>
 /**
  * Le joueur qui tient une case en barrage, s'il y en a un.
  *
- * Un barrage ne se forme qu'à sa propre porte — la case du circuit qui précède
- * son allée. Ailleurs, empiler deux pions ne protège rien : au contraire, un
- * adversaire qui tombe dessus les prend tous les deux d'un coup.
+ * Un barrage ne se forme qu'à sa porte — sa case de départ, celle devant son
+ * écurie où ses pions se posent en entrant en jeu. Ailleurs, empiler deux pions
+ * ne protège rien : au contraire, un adversaire qui tombe dessus les prend tous
+ * les deux d'un coup.
  *
- * C'est ce qui donne son prix à la porte : le seul endroit du plateau où l'on
- * puisse se poser à deux sans risque, et le seul qu'on puisse fermer.
+ * C'est bien la case de départ, et non le seuil de l'allée : un joueur n'a
+ * jamais deux pions sur ce seuil, puisqu'ils bifurquent chez eux dès qu'ils
+ * l'atteignent. Le barrage y aurait été impossible à former.
  */
 export const blockadeOwner = (
   state: LudoState,
@@ -196,7 +198,7 @@ export const blockadeOwner = (
   const premier = dessus[0].owner;
   if (!dessus.every((p) => p.owner === premier)) return null;
 
-  return square === homeGate(premier) ? premier : null;
+  return square === START_SQUARE[premier] ? premier : null;
 };
 
 /**

@@ -441,13 +441,7 @@ const Ludo: React.FC<LudoProps> = ({
           if (peutLancer && (event.key === 'Enter' || event.key === ' ')) roll();
         }}
       >
-        {/*
-          Une fois un pion choisi, on désigne une case : plus aucun pion ne doit
-          intercepter le clic, pas même les siens. Sans cela, une case occupée
-          restait impossible à toucher — celle-là même où l'on veut aller
-          prendre.
-        */}
-        <div className={`${styles.board} ${selected !== null ? styles.picking : ''}`}>
+        <div className={styles.board}>
           {/*
             Les quatre camps sont dessinés même quand deux joueurs seulement
             s'affrontent : un plateau amputé de ses coins ne ressemble plus à un
@@ -481,10 +475,21 @@ const Ludo: React.FC<LudoProps> = ({
             const [row, col] = cle.split(',').map(Number);
             const premier = indices[0];
 
+            /*
+              Une case d'arrivée laisse passer le clic jusqu'à elle, même si des
+              pions l'occupent : c'est là qu'on veut aller prendre. Partout
+              ailleurs, les pions jouables restent touchables — sans quoi il
+              faudrait relâcher le pion choisi avant d'en désigner un autre, et
+              chaque changement d'avis coûterait deux gestes.
+            */
+            const surCible = targets.some(
+              (t) => t.cell.row === row && t.cell.col === col,
+            );
+
             return (
               <div
                 key={cle}
-                className={styles.pawnSlot}
+                className={`${styles.pawnSlot} ${surCible ? styles.onTarget : ''}`}
                 style={{ gridRow: row + 1, gridColumn: col + 1 }}
               >
                 {indices.slice(0, 2).map((index, rang) => {
