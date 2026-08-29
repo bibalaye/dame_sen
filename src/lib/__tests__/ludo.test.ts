@@ -437,6 +437,47 @@ describe('allée finale', () => {
     assert.equal(progressOf(state.pawns.find((p) => p.spot.zone === 'track')!), 51);
   });
 
+  test('on peut passer devant sa porte et repartir pour un tour', () => {
+    // Le pion du joueur 0 a bouclé son tour : il est en 51, à une case de chez
+    // lui. Rentrer n'est pas une obligation — un pion sur le circuit menace
+    // encore, un pion rentré ne fait plus que compter.
+    const state = etat([{ owner: 0, spot: surCase(51) }], { current: 0, dice: [3, 1] });
+    const moves = legalLudoMoves(state);
+
+    assert.ok(
+      moves.some((m) => m.to.zone === 'home'),
+      'entrer chez soi reste possible',
+    );
+    assert.ok(
+      moves.some((m) => m.to.zone === 'track'),
+      'passer devant sa porte aussi',
+    );
+  });
+
+  test('le pion qui a passé sa porte refait tout le tour', () => {
+    const state = etat([{ owner: 0, spot: surCase(51) }], { current: 0, dice: [3, 1] });
+    const tout_droit = legalLudoMoves(state).find((m) => m.to.zone === 'track')!;
+    const apres = playLudoMove(state, tout_droit);
+
+    // Il repart de sa case de départ ou presque : tout le circuit à refaire.
+    assert.ok(progressOf(apres.pawns[tout_droit.pawn]) < 5);
+  });
+
+  test('un six sort le pion de son allée, d’où qu’il soit', () => {
+    // Sans cela, un pion à deux cases du centre attendait des tours entiers le
+    // chiffre exact.
+    for (const step of [0, 1, 2, 3, 4]) {
+      const state = etat([{ owner: 0, spot: dansMaison(0, step) }], {
+        current: 0,
+        dice: [6, 1],
+      });
+
+      const sortie = legalLudoMoves(state).find((m) => m.to.zone === 'finished');
+      assert.ok(sortie, `le six doit sortir le pion depuis la case ${step}`);
+      assert.equal(sortie!.die, 6);
+    }
+  });
+
   test('il faut le compte exact pour atteindre le centre', () => {
     const state = etat([{ owner: 0, spot: dansMaison(0, HOME_LENGTH - 2) }], {
       current: 0,
@@ -493,6 +534,23 @@ describe('incursion dans l’allée d’un adversaire', () => {
     assert.ok(
       apres.pawns.some((p) => p.owner === 0 && isTrespassing(p)),
       'l’assaillant se retrouve chez l’autre',
+    );
+  });
+
+  test('on n’entre pas chez l’autre depuis son seuil', () => {
+    // Le seuil du joueur 1 est la case 12 ; un pion posé dessus ne doit pas
+    // pouvoir bifurquer en arrière dans l'allée.
+    const state = etat(
+      [
+        { owner: 0, spot: surCase(12) },
+        { owner: 1, spot: dansMaison(1, 1) },
+      ],
+      { current: 0, dice: [2, 5] },
+    );
+
+    assert.ok(
+      !legalLudoMoves(state).some((m) => m.kind === 'raid'),
+      'on entre en arrivant sur le seuil, jamais en en repartant',
     );
   });
 

@@ -377,9 +377,18 @@ const movesForPawn = (
     ];
   }
 
-  // --- Sa propre allée : compte exact ---------------------------------------
+  // --- Sa propre allée : compte exact, ou un six -----------------------------
   if (spot.zone === 'home') {
     const step = spot.step + die;
+
+    /*
+     * Un six sort le pion pour de bon, d'où qu'il soit dans l'allée. Sans cela,
+     * un pion à deux cases du centre pouvait attendre des tours entiers le
+     * chiffre exact, pendant que la partie se jouait ailleurs.
+     */
+    if (die === 6) {
+      return [{ kind: 'home', pawn: index, die, to: { zone: 'finished' } }];
+    }
 
     // La dernière case franchie mène au centre ; au-delà, le coup est refusé.
     if (step === HOME_LENGTH) {
@@ -410,13 +419,17 @@ const movesForPawn = (
   const progress = progressOf(pawn);
   const restant = TRACK - progress;
 
-  // Le pion boucle son tour et entre dans sa propre allée.
-  if (die >= restant) {
+  /*
+   * Le pion a bouclé son tour : il peut entrer chez lui — ou passer devant sa
+   * porte et repartir pour un tour complet.
+   *
+   * Rien ne l'y oblige, et c'est parfois le bon choix : un pion qui reste sur
+   * le circuit continue de menacer, tandis qu'un pion rentré ne sert plus qu'à
+   * compter. On ne retourne donc plus ici : l'avance ordinaire s'ajoute plus
+   * bas, et le pion recommencera son tour.
+   */
+  if (die >= restant && pathIsClear(state, spot.square, restant - 1, pawn.owner, sixes)) {
     const step = die - restant;
-
-    if (!pathIsClear(state, spot.square, restant - 1, pawn.owner, sixes)) {
-      return [];
-    }
 
     if (step === HOME_LENGTH) {
       moves.push({ kind: 'home', pawn: index, die, to: { zone: 'finished' } });
@@ -436,8 +449,6 @@ const movesForPawn = (
         });
       }
     }
-    // Au-delà de l'allée, le compte ne tombe pas juste : aucun coup.
-    return moves;
   }
 
   // Avance ordinaire.
@@ -466,7 +477,14 @@ const movesForPawn = (
     const jusquAuSeuil = (gate - spot.square + TRACK) % TRACK;
     const step = die - jusquAuSeuil - 1;
 
-    if (jusquAuSeuil >= die || step < 0 || step >= HOME_LENGTH) continue;
+    /*
+     * On n'entre chez l'autre qu'en arrivant sur son seuil, jamais en en
+     * repartant. Depuis le seuil lui-même, bifurquer dans l'allée ramène le
+     * pion en arrière du chemin qu'il vient de prendre : `jusquAuSeuil` vaut
+     * alors zéro, et le coup est écarté.
+     */
+    if (jusquAuSeuil < 1 || jusquAuSeuil >= die) continue;
+    if (step < 0 || step >= HOME_LENGTH) continue;
     if (!pathIsClear(state, spot.square, jusquAuSeuil, pawn.owner, sixes)) continue;
 
     const proie = state.pawns.findIndex(

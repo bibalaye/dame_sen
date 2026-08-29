@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image';
 
 import Modal from '../Modal';
+import LudoRules from '../LudoRules';
 import { play, vibrate } from '@/lib/sound';
 import {
   LUDO_PLAYERS,
@@ -110,6 +111,7 @@ const Ludo: React.FC<LudoProps> = ({
   const [selected, setSelected] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [rolling, setRolling] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -380,6 +382,18 @@ const Ludo: React.FC<LudoProps> = ({
           ✕
         </button>
 
+        {/* Ces règles ne se devinent pas : un pion pris change de camp
+            d'écurie, empiler expose au lieu de protéger. Elles doivent rester
+            à portée pendant la partie, pas seulement avant. */}
+        <button
+          type="button"
+          className={`uiRound ${styles.back}`}
+          onClick={() => setRulesOpen(true)}
+          aria-label="Règles du jeu"
+        >
+          ?
+        </button>
+
         {/* Chaque camp, son avancement, et qui a la main : on voit d'un coup
             d'œil qui est près de gagner sans compter les pions sur le plateau. */}
         <ul className={styles.players}>
@@ -577,6 +591,8 @@ const Ludo: React.FC<LudoProps> = ({
             </p>
           )}
       </footer>
+
+      {rulesOpen && <LudoRules onClose={() => setRulesOpen(false)} />}
 
       {finished && state.status.kind === 'win' && (
         <Modal variant="center" dismissible={false} onClose={onExit}>
