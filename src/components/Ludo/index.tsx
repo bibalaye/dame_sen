@@ -27,6 +27,7 @@ import {
   type Pawn,
 } from '@/lib/ludo';
 import { chooseLudoMove, type LudoDifficulty } from '@/lib/ludoAi';
+import { resolvePawnTap } from '@/lib/ludoTap';
 import {
   CENTER,
   GRID,
@@ -276,25 +277,19 @@ const Ludo: React.FC<LudoProps> = ({
   const handlePawn = (index: number) => {
     if (!isHuman || finished) return;
 
-    const propres = moves.filter((m) => m.pawn === index);
-    if (propres.length === 0) return;
+    // La décision vit dans `ludoTap` : elle s'était trompée deux fois enfouie
+    // dans ce gestionnaire, où rien ne la vérifiait.
+    const issue = resolvePawnTap(moves, selected, index);
 
-    // Recliquer le pion choisi le relâche : c'est la seule façon de changer
-    // d'avis une fois les destinations affichées.
-    if (index === selected) {
+    if (issue.kind === 'play') {
+      applyMove(issue.move);
+    } else if (issue.kind === 'select') {
+      play('click');
+      setSelected(issue.pawn);
+    } else if (issue.kind === 'release') {
       play('click');
       setSelected(null);
-      return;
     }
-
-    // Un seul coup possible : inutile de demander où aller.
-    if (propres.length === 1) {
-      applyMove(propres[0]);
-      return;
-    }
-
-    play('click');
-    setSelected(index);
   };
 
   const handleTarget = (spot: LudoMove['to']) => {
