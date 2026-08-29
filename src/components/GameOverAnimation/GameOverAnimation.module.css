@@ -207,3 +207,21 @@
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
+
+/* L'état de la revanche, sous les boutons : le libellé du bouton dit ce qu'on
+   peut faire, ces lignes disent pourquoi. */
+.offered,
+.declined {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.offered {
+  color: var(--green-ink);
+  font-weight: 700;
+}
+
+.declined {
+  color: var(--text-soft);
+}

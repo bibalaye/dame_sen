@@ -17,6 +17,18 @@ interface GameOverAnimationProps {
   series: { white: number; black: number };
   bestChain: number;
   onRematch: () => void;
+  /**
+   * Où en est la revanche, en ligne uniquement. Hors ligne, le bouton relance
+   * la partie sans rien demander à personne.
+   */
+  rematch?: 'idle' | 'asked' | 'offered' | 'declined';
+  onDeclineRematch?: () => void;
+  /**
+   * Le camp du joueur. En ligne, il peut être noir — et les couleurs
+   * s'échangent à chaque revanche : sans cette information, l'écran annonçait
+   * une victoire à celui qui venait de perdre.
+   */
+  mySide?: Player;
   onHome: () => void;
   onShare: () => void;
   /** Referme le panneau pour laisser voir la position finale. */
@@ -32,6 +44,9 @@ const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
   series,
   bestChain,
   onRematch,
+  rematch = 'idle',
+  onDeclineRematch,
+  mySide,
   onHome,
   onShare,
   onDismiss,
@@ -49,14 +64,18 @@ const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
 
   if (!isVisible) return null;
 
+  // Le camp du joueur : les blancs partout, sauf en ligne où on peut être noir.
+  const moi: Player = mode === 'online' ? (mySide ?? 'white') : 'white';
+  const jaiGagne = winner === moi;
+
   // À deux sur le même appareil, il n'y a pas de « vous » : on nomme le camp.
-  const celebrate = !isDraw && (mode === 'pass' || winner === 'white');
+  const celebrate = !isDraw && (mode === 'pass' || jaiGagne);
 
   const heading = isDraw
     ? 'Partie nulle'
     : mode === 'pass'
       ? `Les ${winner === 'white' ? 'blancs' : 'noirs'} gagnent`
-      : winner === 'white'
+      : jaiGagne
         ? 'Vous gagnez !'
         : 'Partie perdue';
 
@@ -69,10 +88,10 @@ const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
     : mode === 'pass'
       ? 'Passez l’appareil pour la revanche.'
       : reason === 'timeout'
-        ? winner === 'white'
+        ? jaiGagne
           ? 'Votre adversaire a épuisé son temps.'
           : 'Votre temps est écoulé.'
-        : winner === 'white'
+        : jaiGagne
           ? 'Bien joué.'
           : 'Votre adversaire l’emporte cette fois.';
 
@@ -113,14 +132,46 @@ const GameOverAnimation: React.FC<GameOverAnimationProps> = ({
           </p>
         )}
 
+        {/*
+          En ligne, une revanche se demande à deux : le bouton dit où en est
+          l'échange plutôt que de relancer un plateau que l'autre ne verrait
+          pas.
+        */}
+        {rematch === 'declined' && (
+          <p className={styles.declined}>
+            Votre adversaire préfère en rester là.
+          </p>
+        )}
+
         <div className={styles.actions}>
-          <button type="button" className={`uiButton ${styles.rematch}`} onClick={onRematch}>
-            Revanche
-          </button>
-          <button type="button" className={styles.secondary} onClick={onShare}>
-            Partager
-          </button>
+          {rematch === 'asked' ? (
+            <button type="button" className={`uiButton ${styles.rematch}`} disabled>
+              Proposée…
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`uiButton ${styles.rematch}`}
+              onClick={onRematch}
+            >
+              {rematch === 'offered' ? 'Accepter' : 'Revanche'}
+            </button>
+          )}
+
+          {rematch === 'offered' && onDeclineRematch ? (
+            <button type="button" className={styles.secondary} onClick={onDeclineRematch}>
+              Refuser
+            </button>
+          ) : (
+            <button type="button" className={styles.secondary} onClick={onShare}>
+              Partager
+            </button>
+          )}
         </div>
+
+        {rematch === 'offered' && (
+          <p className={styles.offered}>Votre adversaire veut rejouer.</p>
+        )}
         <button type="button" className={styles.link} onClick={onHome}>
           Retour à l’accueil
         </button>

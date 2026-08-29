@@ -233,6 +233,15 @@ interface GameContextType {
   opponent: string | null;
   /** Nom de l'adversaire qui vient de quitter la partie, s'il y en a un. */
   opponentLeft: string | null;
+  /** L'adversaire propose une revanche et attend une réponse. */
+  rematchOffered: boolean;
+  /** Notre demande est partie : on attend que l'autre réponde. */
+  rematchAsked: boolean;
+  /** L'adversaire a refusé, tant que le joueur ne l'a pas vu. */
+  rematchDeclined: boolean;
+  requestRematch: () => void;
+  declineRematch: () => void;
+  clearRematch: () => void;
   acknowledgeOpponentLeft: () => void;
   isWaitingForOpponent: boolean;
   isGameStarted: boolean;
@@ -363,6 +372,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     acknowledgeOpponentLeft,
     isGameStarted,
     makeMove: socketMakeMove,
+    rematchOffered,
+    rematchAsked,
+    rematchDeclined,
+    requestRematch,
+    declineRematch,
+    clearRematch,
     notifyGameOver,
     createRoom: socketCreateRoom,
     joinRoom: socketJoinRoom,
@@ -829,6 +844,25 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const resetGame = useCallback(() => {
     beginGame({ mode, difficulty, timeControl: clock.control, variant });
   }, [beginGame, clock.control, difficulty, mode, variant]);
+
+  /*
+   * Revanche acceptée : la partie repart dans la même salle. Le score de la
+   * série n'est remis à zéro qu'en quittant la table, ce qui donne son sens à
+   * l'enchaînement — c'est la suite d'une rencontre, pas une partie de plus.
+   *
+   * Les couleurs ont été échangées par le serveur ; `playerType` a déjà changé
+   * quand cet abonnement se déclenche, et le plateau se retourne de lui-même.
+   */
+  useEffect(() => {
+    if (!socket || !isMultiplayer) return;
+
+    const relancer = () => resetGame();
+    socket.on('rematch-start', relancer);
+
+    return () => {
+      socket.off('rematch-start', relancer);
+    };
+  }, [socket, isMultiplayer, resetGame]);
 
   const goHome = useCallback(() => {
     setSeries({ white: 0, black: 0 });
@@ -1362,6 +1396,12 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       opponent,
       opponentLeft,
       acknowledgeOpponentLeft,
+      rematchOffered,
+      rematchAsked,
+      rematchDeclined,
+      requestRematch,
+      declineRematch,
+      clearRematch,
       isWaitingForOpponent,
       isGameStarted,
       socket,

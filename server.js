@@ -155,6 +155,60 @@ app.prepare().then(() => {
       console.log(`Game over in room ${roomId}. Winner: ${winner}`);
     });
 
+    /*
+     * Revanche.
+     *
+     * Refaire une salle après chaque partie obligeait à repasser par le code et
+     * l'invitation, pour deux joueurs déjà face à face. On rejoue donc dans la
+     * même salle.
+     *
+     * Le mécanisme est symétrique : chacun demande, et la partie repart quand
+     * les deux ont demandé. Celui qui demande le premier « propose », le second
+     * « accepte », sans que le serveur ait à distinguer les deux rôles.
+     */
+    socket.on('rematch-request', ({ roomId }) => {
+      const room = gameRooms.get(roomId);
+      if (!room || room.players.length < 2) return;
+
+      room.rematch = room.rematch ?? new Set();
+      room.rematch.add(socket.id);
+
+      if (room.rematch.size < 2) {
+        socket.to(roomId).emit('rematch-offered');
+        return;
+      }
+
+      // Les couleurs s'échangent : sur un plateau où le trait compte, refaire
+      // dix parties du même côté n'aurait rien d'un affrontement égal.
+      room.rematch.clear();
+      for (const player of room.players) {
+        player.player = player.player === 'white' ? 'black' : 'white';
+      }
+      room.currentPlayer = 'white';
+      room.board = null;
+      room.gameStarted = true;
+
+      // Chacun reçoit sa propre couleur : le client ne connaît pas son
+      // identifiant de connexion et ne saurait pas la retrouver dans une liste.
+      for (const player of room.players) {
+        io.to(player.id).emit('rematch-start', {
+          player: player.player,
+          game: room.game ?? 'dames',
+          players: room.players.map((p) => ({ username: p.username, player: p.player })),
+        });
+      }
+
+      console.log(`Rematch in room ${roomId}`);
+    });
+
+    socket.on('rematch-decline', ({ roomId }) => {
+      const room = gameRooms.get(roomId);
+      if (!room) return;
+
+      room.rematch?.clear();
+      socket.to(roomId).emit('rematch-declined');
+    });
+
     // Handle player disconnect
     socket.on('disconnect', () => {
       console.log(`User disconnected: ${socket.id}`);
@@ -164,14 +218,35 @@ app.prepare().then(() => {
         const playerIndex = room.players.findIndex(p => p.id === socket.id);
         
         if (playerIndex !== -1) {
-          // Notify the other player
-          socket.to(roomId).emit('opponent-disconnected');
-          
-          // Remove the room if game hasn't started, otherwise keep it for reconnection
-          if (!room.gameStarted) {
+          // Une demande de revanche ne survit pas au départ de qui l'a faite :
+          // sans cela, le suivant à entrer relancerait une partie sans le savoir.
+          room.rematch?.clear();
+
+          /*
+           * La place se libère vraiment. Elle restait occupée « pour une
+           * reconnexion » qui n'existe pas — un nouveau socket porte un nouvel
+           * identifiant — et la salle demeurait pleine : plus personne ne
+           * pouvait remplacer le partant, ce qui rendait l'attente vaine.
+           */
+          room.players.splice(playerIndex, 1);
+
+          if (room.players.length === 0) {
             gameRooms.delete(roomId);
             console.log(`Room ${roomId} deleted after disconnect`);
+            continue;
           }
+
+          // Celui qui reste reprend les blancs : la salle redevient une salle
+          // d'attente, et le prochain arrivant prendra les noirs comme à
+          // l'ouverture. Sans cette remise à plat, deux joueurs pourraient se
+          // retrouver du même côté.
+          const reste = room.players[0];
+          reste.player = 'white';
+          room.gameStarted = false;
+          room.board = null;
+          room.currentPlayer = 'white';
+
+          io.to(reste.id).emit('opponent-disconnected', { player: 'white' });
         }
       }
     });

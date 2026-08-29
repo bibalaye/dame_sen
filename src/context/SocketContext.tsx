@@ -91,6 +91,15 @@ interface SocketContextType {
   syncGameState: (board: Board, currentPlayer: Player) => void;
   notifyGameOver: (winner: Player) => void;
   setMultiplayerMode: (isMultiplayer: boolean) => void;
+  /** L'adversaire a demandé une revanche et attend une réponse. */
+  rematchOffered: boolean;
+  /** Notre demande est partie : on attend que l'autre réponde. */
+  rematchAsked: boolean;
+  /** L'adversaire a refusé, tant que le joueur ne l'a pas vu. */
+  rematchDeclined: boolean;
+  requestRematch: () => void;
+  declineRematch: () => void;
+  clearRematch: () => void;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
@@ -123,6 +132,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [isRoomCreator, setIsRoomCreator] = useState(false);
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rematchOffered, setRematchOffered] = useState(false);
+  const [rematchAsked, setRematchAsked] = useState(false);
+  const [rematchDeclined, setRematchDeclined] = useState(false);
 
   // Initialize socket connection when multiplayer mode is enabled
   useEffect(() => {
@@ -247,12 +259,55 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     // Opponent disconnected
     // Un départ doit se voir : sans cela, le joueur attend un coup qui ne
     // viendra jamais, sans comprendre pourquoi.
-    socket.on('opponent-disconnected', () => {
+    socket.on('opponent-disconnected', (data?: { player?: Player }) => {
       setOpponentLeft(opponentRef.current ?? 'Votre adversaire');
       setOpponent(null);
       opponentRef.current = null;
       setIsGameStarted(false);
+      setRematchOffered(false);
+      setRematchAsked(false);
+
+      // La place libérée remet celui qui reste aux blancs : sans cela, le
+      // prochain arrivant jouerait la même couleur que lui.
+      if (data?.player) {
+        playerTypeRef.current = data.player;
+        setPlayer(data.player);
+      }
     });
+
+    // --- Revanche ---------------------------------------------------------
+
+    socket.on('rematch-offered', () => {
+      setRematchOffered(true);
+      setRematchDeclined(false);
+    });
+
+    socket.on('rematch-declined', () => {
+      setRematchDeclined(true);
+      setRematchAsked(false);
+      setRematchOffered(false);
+    });
+
+    // La nouvelle couleur vient du serveur : elle s'échange à chaque revanche,
+    // et le client ne peut pas la deviner.
+    socket.on(
+      'rematch-start',
+      (data: { player: Player; players?: { player: Player; username: string }[] }) => {
+        playerTypeRef.current = data.player;
+        setPlayer(data.player);
+
+        const autre = data.players?.find((entry) => entry.player !== data.player);
+        if (autre?.username) {
+          setOpponent(autre.username);
+          opponentRef.current = autre.username;
+        }
+
+        setRematchOffered(false);
+        setRematchAsked(false);
+        setRematchDeclined(false);
+        setIsGameStarted(true);
+      },
+    );
 
     // Clean up listeners on unmount
     return () => {
@@ -264,6 +319,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       socket.off('game-state-updated');
       socket.off('game-over');
       socket.off('opponent-disconnected');
+      socket.off('rematch-offered');
+      socket.off('rematch-declined');
+      socket.off('rematch-start');
     };
   }, [socket]);
 
@@ -283,6 +341,26 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     setError(null);
     socket.emit('create-room', { username, game });
   };
+
+  /**
+   * Demande une revanche. Le mécanisme est symétrique : proposer et accepter
+   * sont le même geste, et la partie repart quand les deux l'ont fait.
+   */
+  const requestRematch = () => {
+    if (!socket || !roomId) return;
+    setRematchDeclined(false);
+    setRematchAsked(true);
+    socket.emit('rematch-request', { roomId });
+  };
+
+  const declineRematch = () => {
+    if (!socket || !roomId) return;
+    setRematchOffered(false);
+    socket.emit('rematch-decline', { roomId });
+  };
+
+  /** Efface le refus une fois montré, pour ne pas le réafficher sans fin. */
+  const clearRematch = () => setRematchDeclined(false);
 
   const joinRoom = (roomId: string, username: string) => {
     if (!socket) {
@@ -337,6 +415,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       setOpponentLeft(null);
       setIsRoomCreator(false);
       setIsGameStarted(false);
+      setRematchOffered(false);
+      setRematchAsked(false);
+      setRematchDeclined(false);
     }
   };
 
@@ -360,7 +441,13 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         makeMove,
         syncGameState,
         notifyGameOver,
-        setMultiplayerMode
+        setMultiplayerMode,
+        rematchOffered,
+        rematchAsked,
+        rematchDeclined,
+        requestRematch,
+        declineRematch,
+        clearRematch,
       }}
     >
       {children}

@@ -57,6 +57,12 @@ const GameBoard = () => {
     toggleMute,
     shareResult,
     gameId,
+    playerType,
+    requestRematch,
+    declineRematch,
+    rematchOffered,
+    rematchAsked,
+    rematchDeclined,
   } = useGameContext();
 
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -311,10 +317,26 @@ const GameBoard = () => {
           mode={mode}
           series={series}
           bestChain={bestChain}
+          // En ligne, la revanche se demande à l'adversaire ; le plateau ne
+          // repart que lorsque tous deux l'ont acceptée.
           onRematch={() => {
             setResultHidden(false);
-            resetGame();
+            if (mode === 'online') requestRematch();
+            else resetGame();
           }}
+          rematch={
+            mode !== 'online'
+              ? 'idle'
+              : rematchDeclined
+                ? 'declined'
+                : rematchOffered
+                  ? 'offered'
+                  : rematchAsked
+                    ? 'asked'
+                    : 'idle'
+          }
+          onDeclineRematch={declineRematch}
+          mySide={playerType ?? undefined}
           onHome={goHome}
           onShare={shareResult}
           onDismiss={() => setResultHidden(true)}
