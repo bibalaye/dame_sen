@@ -19,7 +19,7 @@ import {
   PIECES_PER_PLAYER,
   START_SQUARE,
   TRACK,
-  type LudoPlayerId,
+
 } from '../ludo.ts';
 
 const cle = (cell: Cell) => `${cell.row},${cell.col}`;
