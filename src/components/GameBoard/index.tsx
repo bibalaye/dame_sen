@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Board from '../Board';
 import ComboBanner from '../ComboBanner';
 import DailyPanel from '../DailyPanel';
@@ -16,6 +16,13 @@ import { useGameContext } from '@/context/GameContext';
 import styles from './GameBoard.module.css';
 
 type Sheet = 'menu' | 'rules' | 'room' | 'pieces' | null;
+
+/**
+ * Attente avant l'écran de fin, en millisecondes. Assez pour voir la dernière
+ * pièce se poser — l'animation de sortie en dure 340 — sans donner
+ * l'impression que le jeu s'est figé.
+ */
+const RESULT_DELAY = 1200;
 
 const GameBoard = () => {
   const {
@@ -49,11 +56,30 @@ const GameBoard = () => {
     goHome,
     toggleMute,
     shareResult,
+    gameId,
   } = useGameContext();
 
   const [sheet, setSheet] = useState<Sheet>(null);
   /** Écran de fin refermé : le joueur veut revoir la position. */
   const [resultHidden, setResultHidden] = useState(false);
+
+  /*
+   * Le coup qui termine la partie mérite d'être vu. L'écran de fin recouvrait
+   * le plateau dans le même souffle : on ne savait pas quelle pièce venait de
+   * tomber, ni par où. Il attend maintenant que la dernière pièce se soit
+   * posée.
+   */
+  const [resultReady, setResultReady] = useState(false);
+
+  useEffect(() => {
+    if (!gameOver) {
+      setResultReady(false);
+      return;
+    }
+
+    const timer = setTimeout(() => setResultReady(true), RESULT_DELAY);
+    return () => clearTimeout(timer);
+  }, [gameOver, gameId]);
 
   const character = OPPONENTS.find((entry) => entry.id === difficulty);
   const startingPieces = mode === 'daily' ? Math.max(whitePieces, blackPieces, 1) : 12;
@@ -281,7 +307,7 @@ const GameBoard = () => {
           winner={winner}
           isDraw={status.kind === 'draw'}
           reason={status.kind === 'playing' ? null : status.reason}
-          isVisible={gameOver && !resultHidden}
+          isVisible={gameOver && resultReady && !resultHidden}
           mode={mode}
           series={series}
           bestChain={bestChain}

@@ -197,7 +197,7 @@ const HomeScreen: React.FC = () => {
               demandes > 0 ? `Amis, ${demandes} demande(s) en attente` : 'Mes amis'
             }
           >
-            <Image src="/assets/ui/icon-check.png" alt="" width={17} height={17} />
+            <Image src="/assets/pieces/lutteur-black.png" alt="" width={20} height={20} />
             {demandes > 0 && <span className={styles.badge}>{demandes}</span>}
           </button>
 

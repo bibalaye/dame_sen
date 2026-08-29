@@ -51,6 +51,7 @@ const gameFrom = (rows: readonly string[], currentPlayer: Player): GameState => 
   lastCapture: null,
   lastPromotion: false,
   chainLength: 0,
+  lonePlies: 0,
   rules: DEFAULT_RULES,
 });
 

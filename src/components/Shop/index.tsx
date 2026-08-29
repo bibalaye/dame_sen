@@ -5,6 +5,7 @@ import Image from 'next/image';
 
 import Modal from '../Modal';
 import { useGameContext } from '@/context/GameContext';
+import { useAccount } from '@/context/AccountContext';
 import { formatCoins } from '@/lib/economy';
 import { BOARD_THEMES, findBoardTheme } from '@/lib/boards';
 import { findPieceSet, type PieceSetId } from '@/lib/pieceSets';
@@ -35,7 +36,7 @@ interface ShopProps {
  * jeu — les pions sur un fragment de damier, un plateau par ses vraies
  * couleurs, un cadre autour d'une initiale.
  */
-const Apercu: React.FC<{ item: ShopItem }> = ({ item }) => {
+const Apercu: React.FC<{ item: ShopItem; initiale: string }> = ({ item, initiale }) => {
   const local = localId(item.id);
 
   if (item.kind === 'pieces') {
@@ -75,7 +76,9 @@ const Apercu: React.FC<{ item: ShopItem }> = ({ item }) => {
     const frame = FRAMES.find((entry) => entry.id === item.id);
     return (
       <span className={styles.previewFrame}>
-        <span style={{ borderColor: frame?.color ?? 'var(--line)' }}>A</span>
+        {/* L'initiale du joueur, pas une lettre au hasard : on voit ce que le
+            cadre donnera sur son propre profil. */}
+        <span style={{ borderColor: frame?.color ?? 'var(--line)' }}>{initiale}</span>
       </span>
     );
   }
@@ -113,6 +116,9 @@ const Shop: React.FC<ShopProps> = ({ onClose }) => {
 
   const [rayon, setRayon] = useState<ItemKind>('pieces');
 
+  const { account } = useAccount();
+  const initiale = (account?.displayName ?? 'A').slice(0, 1).toUpperCase();
+
   /** Ce qui est porté dans chaque famille, pour marquer l'article en cours. */
   const porte = (item: ShopItem): boolean => {
     const local = localId(item.id);
@@ -148,7 +154,7 @@ const Shop: React.FC<ShopProps> = ({ onClose }) => {
   return (
     <Modal title="Boutique" onClose={onClose}>
       <div className={styles.purse}>
-        <Image src="/assets/ui/star.png" alt="" width={20} height={19} />
+        <Image src="/assets/pieces/disc-yellow.png" alt="" width={22} height={22} />
         <strong>{formatCoins(wallet.coins)}</strong>
         <span>cauris</span>
       </div>
@@ -194,7 +200,7 @@ const Shop: React.FC<ShopProps> = ({ onClose }) => {
               <span className={styles.rarity}>{RARITY_LABELS[item.rarity]}</span>
 
               <span className={styles.preview}>
-                <Apercu item={item} />
+                <Apercu item={item} initiale={initiale} />
               </span>
 
               <span className={styles.name}>{item.name}</span>

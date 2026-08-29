@@ -41,29 +41,27 @@
 
 .tabs {
   display: flex;
-  gap: 5px;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-bottom: 14px;
   padding: 5px;
   border-radius: 14px;
   background: var(--surface-sunk);
-  /* Cinq rayons ne tiennent pas sur un écran étroit : ils défilent. */
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
-.tabs::-webkit-scrollbar {
-  display: none;
-}
-
+/* Les cinq rayons passent à la ligne plutôt que de défiler : une barre de
+   défilement horizontale sur cinq onglets ressemble à un défaut, et le dernier
+   rayon restait invisible. */
 .tab {
-  flex: 1 0 auto;
-  padding: 10px 14px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px 8px;
   border: 0;
   border-radius: 10px;
   background: transparent;
   color: var(--text-soft);
   font-family: inherit;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   font-weight: 800;
   white-space: nowrap;
   cursor: pointer;
@@ -86,13 +84,15 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-  max-height: 56vh;
-  overflow-y: auto;
-  /* La bordure de rareté déborde légèrement : sans marge, elle serait rognée
-     par le cadre de défilement. */
-  padding: 4px;
-  margin: -4px;
+  /* Plus d'espace en haut qu'entre les colonnes : le badge de rareté déborde
+     du haut de chaque carte. */
+  gap: 16px 10px;
+
+  /*
+   * Pas de défilement propre : la fenêtre en a déjà un. Deux zones imbriquées
+   * donnaient deux ascenseurs côte à côte, et un troisième en travers.
+   */
+  padding-top: 8px;
 }
 
 .card {

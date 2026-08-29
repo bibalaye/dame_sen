@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 
 import {
   DEFAULT_RULES,
+  LONE_PIECES_GRACE,
   createGame,
+  evaluateStatus,
   generateCapturesForPiece,
   generateMoves,
   generateQuietMovesForPiece,
@@ -49,6 +51,7 @@ const gameWith = (
   lastCapture: null,
   lastPromotion: false,
   chainLength: 0,
+  lonePlies: 0,
   rules: { ...DEFAULT_RULES, ...rules },
 });
 
@@ -249,10 +252,21 @@ describe('robustesse', () => {
 });
 
 describe('fins de partie', () => {
-  test('une pièce contre une : la partie est nulle', () => {
-    // Les blancs prennent l'avant-dernier noir : il reste un pion de chaque côté.
+  /** Joue au hasard tant que la partie continue, au plus `tours` demi-coups. */
+  const laisserJouer = (depart: GameState, tours: number): GameState => {
+    let state = depart;
+    for (let i = 0; i < tours && state.status.kind === 'playing'; i++) {
+      const moves = legalMoves(state);
+      if (moves.length === 0) break;
+      state = playMove(state, moves[0]);
+    }
+    return state;
+  };
+
+  // Les blancs prennent l'avant-dernier noir : il reste un pion de chaque côté.
+  const unContreUn = () => {
     const state = gameWith(['.....', '.....', '.bw..', '.....', 'b....'], 'white');
-    const next = playMove(state, {
+    return playMove(state, {
       fromRow: 2,
       fromCol: 2,
       toRow: 2,
@@ -260,11 +274,64 @@ describe('fins de partie', () => {
       captureRow: 2,
       captureCol: 1,
     });
+  };
 
-    assert.equal(next.status.kind, 'draw');
-    if (next.status.kind === 'draw') {
-      assert.equal(next.status.reason, 'lone-pieces');
-    }
+  test('une pièce contre une ne clôt pas la partie sur-le-champ', () => {
+    const next = unContreUn();
+
+    assert.equal(
+      next.status.kind,
+      'playing',
+      'une prise peut encore se présenter : on ne la retire pas au joueur',
+    );
+    assert.equal(next.lonePlies, 1);
+  });
+
+  // Deux dames aux coins opposés : elles ne peuvent pas se prendre, et c'est
+  // le seul cas où le sursis s'épuise vraiment.
+  const deuxDames = boardFrom(['W....', '.....', '.....', '.....', '....B']);
+
+  test('la nulle tombe une fois le sursis épuisé', () => {
+    const status = evaluateStatus(
+      deuxDames,
+      'white',
+      0,
+      {},
+      DEFAULT_RULES,
+      LONE_PIECES_GRACE,
+    );
+
+    assert.equal(status.kind, 'draw');
+    if (status.kind === 'draw') assert.equal(status.reason, 'lone-pieces');
+  });
+
+  test('un demi-coup avant la limite, la partie reste ouverte', () => {
+    const status = evaluateStatus(
+      deuxDames,
+      'white',
+      0,
+      {},
+      DEFAULT_RULES,
+      LONE_PIECES_GRACE - 1,
+    );
+
+    assert.equal(status.kind, 'playing');
+  });
+
+  test('une prise pendant le sursis donne la victoire', () => {
+    // Les deux dernières pièces se touchent : les blancs prennent et gagnent.
+    const state = gameWith(['.....', '.....', 'wb...', '.....', '.....'], 'white');
+    const next = playMove(state, {
+      fromRow: 2,
+      fromCol: 0,
+      toRow: 2,
+      toCol: 2,
+      captureRow: 2,
+      captureCol: 1,
+    });
+
+    assert.equal(next.status.kind, 'win');
+    if (next.status.kind === 'win') assert.equal(next.status.winner, 'white');
   });
 
   test('deux pièces contre une laissent la partie ouverte', () => {
@@ -300,9 +367,22 @@ describe('fins de partie', () => {
     }
   });
 
-  test('plus aucun coup n’est légal une fois la nulle prononcée', () => {
-    const state = gameWith(['.....', '.....', '.bw..', '.....', 'b....'], 'white');
-    const drawn = playMove(state, {
+  test('le sursis laisse la partie se jouer jusqu’au bout', () => {
+    // En jouant au plus court, l'une des deux dames finit par prendre l'autre :
+    // c'est précisément la victoire que la nulle immédiate escamotait.
+    const fin = laisserJouer(unContreUn(), LONE_PIECES_GRACE);
+
+    assert.notEqual(
+      fin.status.kind,
+      'playing',
+      'la partie doit se conclure d’une façon ou d’une autre',
+    );
+  });
+
+  test('le décompte repart si la position cesse d’être à un contre un', () => {
+    // Trois pièces : le décompte ne doit pas courir.
+    const state = gameWith(['.....', '.....', '.bw..', '.....', 'bw...'], 'white');
+    const next = playMove(state, {
       fromRow: 2,
       fromCol: 2,
       toRow: 2,
@@ -311,7 +391,6 @@ describe('fins de partie', () => {
       captureCol: 1,
     });
 
-    assert.equal(legalMoves(drawn).length, 0);
-    assert.equal(playMove(drawn, { fromRow: 2, fromCol: 0, toRow: 3, toCol: 0 }), drawn);
+    assert.equal(next.lonePlies, 0, 'deux blancs restent en jeu');
   });
 });

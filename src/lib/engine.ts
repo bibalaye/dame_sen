@@ -128,6 +128,12 @@ export interface GameState {
   readonly lastPromotion: boolean;
   /** Prises enchaînées par le tour en cours : 3 pour une rafle triple. */
   readonly chainLength: number;
+  /**
+   * Demi-coups joués depuis qu'il ne reste qu'une pièce de chaque côté. Remis à
+   * zéro dès que ce n'est plus le cas — ce qui n'arrive qu'en fin de partie,
+   * puisqu'on ne regagne jamais de pièce.
+   */
+  readonly lonePlies: number;
   /** Les règles sous lesquelles cette partie se joue. */
   readonly rules: RuleSet;
 }
@@ -529,12 +535,20 @@ export const applyMove = (board: Board, move: Move): AppliedMove => {
  * Appelée après chaque changement de trait, jamais sur des compteurs mémorisés
  * ailleurs : le plateau est la seule source de vérité.
  */
+/**
+ * Demi-coups laissés aux deux derniers survivants avant la nulle : trois tours
+ * chacun. Assez pour qu'une prise encore possible se joue, trop peu pour faire
+ * traîner une partie qui n'a plus d'issue.
+ */
+export const LONE_PIECES_GRACE = 6;
+
 export const evaluateStatus = (
   board: Board,
   playerToMove: Player,
   halfmoveClock: number,
   positionCounts: Readonly<Record<string, number>>,
   rules: RuleSet = DEFAULT_RULES,
+  lonePlies = 0,
 ): Status => {
   if (countPieces(board, playerToMove) === 0) {
     return { kind: 'win', winner: opponentOf(playerToMove), reason: 'capture' };
@@ -543,13 +557,18 @@ export const evaluateStatus = (
     return { kind: 'win', winner: opponentOf(playerToMove), reason: 'block' };
   }
   /*
-   * Une pièce contre une, sur cinq cases de côté : aucun des deux camps ne peut
-   * plus forcer la prise, chacun n'ayant qu'à fuir. Prolonger reviendrait à
-   * attendre les vingt-cinq coups de la règle d'inaction pour le même résultat.
+   * Une pièce contre une : aucun des deux camps ne peut plus forcer la prise,
+   * chacun n'ayant qu'à fuir. Mais déclarer la nulle sur-le-champ enlève au
+   * joueur la prise qu'il voyait venir — l'autre peut encore se placer mal, et
+   * une dame qui s'aligne se fait prendre. On laisse donc trois tours à
+   * chacun ; passé quoi, il n'y a plus rien à espérer et prolonger reviendrait
+   * à attendre les vingt-cinq coups de la règle d'inaction pour le même
+   * résultat.
    */
   if (
     countPieces(board, 'white') === 1 &&
-    countPieces(board, 'black') === 1
+    countPieces(board, 'black') === 1 &&
+    lonePlies >= LONE_PIECES_GRACE
   ) {
     return { kind: 'draw', reason: 'lone-pieces' };
   }
@@ -579,6 +598,7 @@ export const createGame = (
     lastCapture: null,
     lastPromotion: false,
     chainLength: 0,
+    lonePlies: 0,
     rules,
   };
 };
@@ -644,6 +664,13 @@ export const playMove = (state: GameState, move: Move): GameState => {
     ? { [key]: 1 }
     : { ...state.positionCounts, [key]: (state.positionCounts[key] ?? 0) + 1 };
 
+  // Le décompte ne court que sur les tours joués à un contre un ; il repart de
+  // zéro si la position ne l'est pas.
+  const lonePlies =
+    countPieces(board, 'white') === 1 && countPieces(board, 'black') === 1
+      ? state.lonePlies + 1
+      : 0;
+
   return {
     board,
     currentPlayer: nextPlayer,
@@ -656,11 +683,13 @@ export const playMove = (state: GameState, move: Move): GameState => {
       halfmoveClock,
       positionCounts,
       state.rules,
+      lonePlies,
     ),
     lastMove: legal,
     lastCapture: capturedAt,
     lastPromotion: promoted,
     chainLength,
+    lonePlies,
     rules: state.rules,
   };
 };

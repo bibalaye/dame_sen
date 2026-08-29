@@ -27,6 +27,12 @@ import {
 import styles from './Morpion.module.css';
 
 /** Le joueur humain a toujours les croix ; l'adversaire prend les ronds. */
+/**
+ * Attente avant le résultat, en millisecondes. Le temps de voir le dernier
+ * pion se poser, sans donner l'impression que le jeu s'est figé.
+ */
+const RESULT_DELAY = 1200;
+
 const HUMAN: Mark = 'X';
 const AI: Mark = 'O';
 
@@ -80,6 +86,23 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
 
   const character = MORPION_OPPONENTS.find((entry) => entry.id === difficulty);
   const finished = state.status.kind !== 'playing';
+
+  /*
+   * Le coup qui termine la partie mérite d'être vu : le résultat recouvrait la
+   * grille dans le même souffle, sans qu'on sache quel alignement venait de se
+   * faire.
+   */
+  const [resultReady, setResultReady] = useState(false);
+
+  useEffect(() => {
+    if (!finished) {
+      setResultReady(false);
+      return;
+    }
+
+    const timer = setTimeout(() => setResultReady(true), RESULT_DELAY);
+    return () => clearTimeout(timer);
+  }, [finished]);
   const winningLine = state.status.kind === 'win' ? state.status.line : null;
   const isMoving = state.phase === 'movement';
 
@@ -454,7 +477,7 @@ const Morpion: React.FC<MorpionProps> = ({ mode, difficulty, variant }) => {
         </Modal>
       )}
 
-      {finished && !resultHidden && (
+      {finished && resultReady && !resultHidden && (
         <Modal
           variant="center"
           dismissible={false}
