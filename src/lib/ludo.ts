@@ -109,8 +109,14 @@ export type LudoStatus =
 export interface LudoState {
   readonly pawns: readonly Pawn[];
   readonly current: LudoPlayerId;
-  /** Dés lancés qu'il reste à employer. Vide tant qu'on n'a pas lancé. */
+  /** Dés qu'il reste à employer. Se vide à mesure qu'on les joue. */
   readonly dice: readonly number[];
+  /**
+   * Le lancer du tour, intact. Sans lui, `dice` vide voudrait dire deux choses
+   * — pas encore lancé, ou tout joué — et le tour ne se terminerait jamais.
+   * Il sert aussi à savoir si un six est tombé une fois les dés dépensés.
+   */
+  readonly rolled: readonly number[];
   /**
    * Relances déjà accordées dans ce tour. Un six rend la main, mais pas
    * indéfiniment : sans plafond, une série chanceuse tiendrait le tour ouvert
@@ -139,6 +145,7 @@ export const createLudoGame = (playerCount = 4): LudoState => {
     pawns,
     current: 0,
     dice: [],
+    rolled: [],
     extraRolls: 0,
     status: { kind: 'playing' },
     playerCount,
@@ -474,7 +481,7 @@ export const nextPlayer = (state: LudoState): LudoPlayerId =>
  */
 export const rollInto = (state: LudoState, dice: readonly number[]): LudoState => {
   if (state.status.kind !== 'playing') return state;
-  return { ...state, dice: [...dice] };
+  return { ...state, dice: [...dice], rolled: [...dice] };
 };
 
 /** Un lancer, à partir d'une source de hasard fournie. */
@@ -549,9 +556,21 @@ export const sameSpot = (a: PawnSpot, b: PawnSpot): boolean => {
 };
 
 /**
- * Vrai si le tour du joueur doit se poursuivre : il lui reste un dé jouable, ou
- * un six lui rend la main.
+ * Vrai si le joueur n'a plus rien à faire de son lancer : soit il a dépensé ses
+ * deux dés, soit aucun ne se joue.
+ *
+ * C'est ici que se règle la question qui a laissé un joueur enchaîner tous les
+ * tours : `dice` vide ne suffit pas à conclure, puisque c'est aussi l'état
+ * avant le lancer. Le tour ne se termine que si le lancer a eu lieu.
  */
+export const turnIsOver = (state: LudoState): boolean => {
+  if (state.status.kind !== 'playing') return false;
+  if (state.rolled.length === 0) return false;
+
+  return state.dice.length === 0 || legalLudoMoves(state).length === 0;
+};
+
+/** Vrai si le joueur a encore un dé jouable. */
 export const turnContinues = (state: LudoState): boolean => {
   if (state.status.kind !== 'playing') return false;
   return state.dice.length > 0 && legalLudoMoves(state).length > 0;
@@ -573,6 +592,7 @@ export const endTurn = (state: LudoState, again: boolean): LudoState => {
   return {
     ...state,
     dice: [],
+    rolled: [],
     current: again ? state.current : nextPlayer(state),
     extraRolls: again ? state.extraRolls + 1 : 0,
   };

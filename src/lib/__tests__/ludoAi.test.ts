@@ -42,6 +42,8 @@ const etat = (
     pawns,
     current: options.current ?? 0,
     dice: options.dice ?? [],
+    // Le lancer est intact tant qu'on n'a rien joué.
+    rolled: options.dice ?? [],
   };
 };
 

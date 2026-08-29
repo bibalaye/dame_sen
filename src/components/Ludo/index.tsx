@@ -13,6 +13,7 @@ import {
   isCaptive,
   legalLudoMoves,
   playLudoMove,
+  turnIsOver,
   rollDice,
   rollInto,
   sameSpot,
@@ -150,47 +151,46 @@ const Ludo: React.FC<LudoProps> = ({
   }, [rolling]);
 
   /*
-   * Fin de tour : plus de dé jouable. On relance si un six est tombé, sinon la
-   * main passe. Le tour ne se termine jamais de lui-même au milieu d'un coup —
-   * c'est l'absence de coup légal qui le clôt.
+   * Fin de tour : le moteur seul en décide. Le composant s'en remettait à
+   * `dice.length`, ce qui ne distinguait pas « pas encore lancé » de « tout
+   * joué » — et le joueur qui sortait le premier gardait la main indéfiniment.
    */
-  useEffect(() => {
-    if (finished || rolling) return;
-    if (state.dice.length === 0) return;
-    if (moves.length > 0) return;
+  const tourFini = turnIsOver(state);
 
-    const relance = earnsExtraRoll(state.dice, state.extraRolls);
+  useEffect(() => {
+    if (finished || rolling || !tourFini) return;
+
+    const relance = earnsExtraRoll(state.rolled, state.extraRolls);
     const timer = setTimeout(() => {
-      setNotice(relance ? 'Vous rejouez.' : 'Aucun coup possible.');
+      setNotice(relance ? 'Six : vous rejouez.' : null);
       setState((current) => endTurn(current, relance));
-    }, 700);
+    }, moves.length === 0 ? 700 : 420);
 
     return () => clearTimeout(timer);
-  }, [state.dice, state.extraRolls, moves.length, finished, rolling]);
+  }, [tourFini, state.rolled, state.extraRolls, moves.length, finished, rolling]);
 
-  /** Le tour de l'adversaire : il lance, joue, puis rend la main. */
+  /**
+   * L'adversaire lance puis joue ; la fin de son tour est réglée par l'effet
+   * ci-dessus, comme pour un joueur humain. Deux chemins pour la même règle
+   * finiraient par diverger.
+   */
   useEffect(() => {
-    if (finished || isHuman || rolling) return;
+    if (finished || isHuman || rolling || tourFini) return;
 
     const timer = setTimeout(() => {
       const current = stateRef.current;
 
-      if (current.dice.length === 0) {
+      if (current.rolled.length === 0) {
         setState(rollInto(current, rollDice()));
         return;
       }
 
       const choix = chooseLudoMove(current, difficulty);
-      if (choix) {
-        applyMove(choix);
-        return;
-      }
-
-      setState(endTurn(current, earnsExtraRoll(current.dice, current.extraRolls)));
+      if (choix) applyMove(choix);
     }, AI_DELAY);
 
     return () => clearTimeout(timer);
-  }, [state, finished, isHuman, rolling, difficulty, applyMove]);
+  }, [state, finished, isHuman, rolling, tourFini, difficulty, applyMove]);
 
   // La partie terminée se signale une seule fois.
   const reported = useRef(false);
@@ -394,7 +394,7 @@ const Ludo: React.FC<LudoProps> = ({
 
       <footer className={styles.bottom}>
         <div className={styles.dice}>
-          {state.dice.length === 0 ? (
+          {state.rolled.length === 0 ? (
             <button
               type="button"
               className={`uiButton ${styles.roll}`}
@@ -414,7 +414,7 @@ const Ludo: React.FC<LudoProps> = ({
 
         {notice && <p className={styles.notice}>{notice}</p>}
 
-        {state.dice.length > 0 && isHuman && moves.length > 0 && (
+        {state.rolled.length > 0 && isHuman && moves.length > 0 && !tourFini && (
           <p className={styles.hint}>
             {selected === null
               ? 'Touchez un pion à déplacer.'

@@ -17,6 +17,7 @@ import {
   progressOf,
   rollDice,
   rollInto,
+  turnIsOver,
   type LudoPlayerId,
   type LudoState,
   type Pawn,
@@ -48,6 +49,8 @@ const etat = (
     pawns,
     current: options.current ?? 0,
     dice: options.dice ?? [],
+    // Le lancer est intact tant qu'on n'a rien joué.
+    rolled: options.dice ?? [],
   };
 };
 
@@ -402,6 +405,52 @@ describe('déroulement du tour', () => {
     assert.ok(!earnsExtraRoll([6, 6], 3), 'le plafond arrête la série');
   });
 
+  test('le tour n’est pas fini tant qu’on n’a pas lancé', () => {
+    const state = createLudoGame(4);
+    assert.ok(!turnIsOver(state), 'sans lancer, il n’y a rien à conclure');
+  });
+
+  test('le tour se termine une fois les deux dés joués', () => {
+    // C'est le cas qui manquait : `dice` vide ne suffisait pas à conclure,
+    // puisque c'est aussi l'état avant le lancer. Le joueur qui sortait le
+    // premier gardait la main et enchaînait tous les tours.
+    let state = etat([{ owner: 0, spot: surCase(10) }], { current: 0, dice: [3, 5] });
+
+    state = playLudoMove(state, legalLudoMoves(state).find((m) => m.die === 3)!);
+    assert.ok(!turnIsOver(state), 'un dé reste à jouer');
+
+    state = playLudoMove(state, legalLudoMoves(state).find((m) => m.die === 5)!);
+    assert.deepEqual(state.dice, []);
+    assert.ok(turnIsOver(state), 'les deux dés sont dépensés : la main doit passer');
+  });
+
+  test('le tour se termine aussi quand aucun dé ne se joue', () => {
+    // Rien en jeu et pas de six : il n'y a rien à faire de ce lancer.
+    const state = rollInto(createLudoGame(4), [3, 5]);
+
+    assert.equal(legalLudoMoves(state).length, 0);
+    assert.ok(turnIsOver(state));
+  });
+
+  test('le six se reconnaît encore après avoir été dépensé', () => {
+    let state = rollInto(createLudoGame(4), [6, 2]);
+    state = playLudoMove(state, legalLudoMoves(state)[0]);
+
+    assert.ok(!state.dice.includes(6), 'le six a été joué');
+    assert.ok(
+      earnsExtraRoll(state.rolled, state.extraRolls),
+      'le lancer garde la trace du six, sinon la relance se perdrait',
+    );
+  });
+
+  test('passer la main efface le lancer', () => {
+    const state = rollInto(createLudoGame(4), [6, 2]);
+    const apres = endTurn(state, false);
+
+    assert.deepEqual(apres.rolled, []);
+    assert.ok(!turnIsOver(apres), 'le joueur suivant doit d’abord lancer');
+  });
+
   test('passer la main change de joueur', () => {
     const state = createLudoGame(4);
     assert.equal(endTurn(state, false).current, 1);
@@ -412,6 +461,89 @@ describe('déroulement du tour', () => {
     const state = createLudoGame(2);
     assert.equal(endTurn(state, false).current, 1);
     assert.equal(endTurn(endTurn(state, false), false).current, 0);
+  });
+});
+
+describe('la main tourne', () => {
+  /**
+   * Reproduit exactement le cycle de l'écran : lancer, jouer tant qu'un dé se
+   * joue, puis conclure. C'est ce que le composant fait, et c'est là que le
+   * premier joueur gardait la main pour toute la partie.
+   */
+  const jouerDesTours = (nombre: number) => {
+    let state = createLudoGame(4);
+    let graine = 20260829;
+    const random = () => {
+      graine = (graine * 1103515245 + 12345) % 2147483648;
+      return graine / 2147483648;
+    };
+
+    const tours: number[] = [];
+
+    for (let i = 0; i < nombre && state.status.kind === 'playing'; i++) {
+      tours.push(state.current);
+      state = rollInto(state, rollDice(random));
+
+      /*
+       * Le garde-fou n'est pas décoratif : sans lui, une règle de fin de tour
+       * cassée fait tourner cette boucle indéfiniment, et le test bloque au
+       * lieu d'échouer. On veut un message, pas un silence.
+       */
+      let coups = 0;
+      while (!turnIsOver(state)) {
+        assert.ok(coups++ < 8, 'le tour ne se termine jamais');
+
+        const moves = legalLudoMoves(state);
+        assert.ok(moves.length > 0, 'aucun coup, et pourtant le tour continue');
+
+        state = playLudoMove(state, moves[Math.floor(random() * moves.length)]);
+      }
+
+      if (state.status.kind !== 'playing') break;
+      state = endTurn(state, earnsExtraRoll(state.rolled, state.extraRolls));
+    }
+
+    return tours;
+  };
+
+  test('les quatre joueurs prennent la main', () => {
+    const tours = jouerDesTours(60);
+    const vus = new Set(tours);
+
+    assert.equal(
+      vus.size,
+      4,
+      `seuls les joueurs ${[...vus].join(', ')} ont joué : la main ne tourne pas`,
+    );
+  });
+
+  test('personne n’enchaîne un nombre déraisonnable de tours', () => {
+    const tours = jouerDesTours(60);
+
+    let suite = 1;
+    let record = 1;
+    for (let i = 1; i < tours.length; i++) {
+      suite = tours[i] === tours[i - 1] ? suite + 1 : 1;
+      record = Math.max(record, suite);
+    }
+
+    // Un six rend la main, plafonné à trois relances : quatre tours d'affilée
+    // au plus.
+    assert.ok(record <= 4, `un joueur a enchaîné ${record} tours de suite`);
+  });
+
+  test('la main revient dans l’ordre', () => {
+    const tours = jouerDesTours(40);
+
+    for (let i = 1; i < tours.length; i++) {
+      const precedent = tours[i - 1];
+      const attendu = (precedent + 1) % 4;
+
+      assert.ok(
+        tours[i] === attendu || tours[i] === precedent,
+        `après le joueur ${precedent}, on attend ${attendu} ou une relance, pas ${tours[i]}`,
+      );
+    }
   });
 });
 
