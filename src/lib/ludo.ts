@@ -30,8 +30,12 @@ export const LUDO_PLAYERS: readonly LudoPlayerId[] = [0, 1, 2, 3];
 /** Cases du circuit commun : quatre bras de treize. */
 export const TRACK = 52;
 
-/** Longueur de l'allée finale, la « maison ». */
-export const HOME_LENGTH = 6;
+/**
+ * Longueur de l'allée finale. Cinq cases colorées menant au centre : c'est ce
+ * que dessine un plateau de quinze sur quinze, et le pion entre au centre au
+ * pas suivant.
+ */
+export const HOME_LENGTH = 5;
 
 export const PIECES_PER_PLAYER = 4;
 
