@@ -109,8 +109,8 @@ describe('mise en place', () => {
   });
 
   test('le seuil d’un joueur précède son départ', () => {
-    assert.equal(homeGate(0), 51);
-    assert.equal(homeGate(1), 12);
+    assert.equal(homeGate(0), 50);
+    assert.equal(homeGate(1), 11);
   });
 });
 
@@ -429,20 +429,20 @@ describe('empiler hors de sa porte expose les deux pions', () => {
 
 describe('allée finale', () => {
   test('le tour bouclé mène dans sa propre allée', () => {
-    // Le joueur 0 part de 0 ; à la case 51, il a parcouru 51 cases.
-    const state = etat([{ owner: 0, spot: surCase(51) }], { current: 0, dice: [3, 1] });
+    // Le joueur 0 part de 0 ; à la case 50, il a parcouru 50 cases jusqu'à son seuil.
+    const state = etat([{ owner: 0, spot: surCase(50) }], { current: 0, dice: [3, 1] });
     const moves = legalLudoMoves(state);
 
     const entree = moves.find((m) => m.to.zone === 'home');
     assert.ok(entree, 'le pion doit pouvoir entrer chez lui');
-    assert.equal(progressOf(state.pawns.find((p) => p.spot.zone === 'track')!), 51);
+    assert.equal(progressOf(state.pawns.find((p) => p.spot.zone === 'track')!), 50);
   });
 
   test('on peut passer devant sa porte et repartir pour un tour', () => {
-    // Le pion du joueur 0 a bouclé son tour : il est en 51, à une case de chez
-    // lui. Rentrer n'est pas une obligation — un pion sur le circuit menace
+    // Le pion du joueur 0 a bouclé son tour : il est en 50, sur son seuil.
+    // Rentrer n'est pas une obligation — un pion sur le circuit menace
     // encore, un pion rentré ne fait plus que compter.
-    const state = etat([{ owner: 0, spot: surCase(51) }], { current: 0, dice: [3, 1] });
+    const state = etat([{ owner: 0, spot: surCase(50) }], { current: 0, dice: [3, 1] });
     const moves = legalLudoMoves(state);
 
     assert.ok(
@@ -456,7 +456,7 @@ describe('allée finale', () => {
   });
 
   test('le pion qui a passé sa porte refait tout le tour', () => {
-    const state = etat([{ owner: 0, spot: surCase(51) }], { current: 0, dice: [3, 1] });
+    const state = etat([{ owner: 0, spot: surCase(50) }], { current: 0, dice: [3, 1] });
     const tout_droit = legalLudoMoves(state).find((m) => m.to.zone === 'track')!;
     const apres = playLudoMove(state, tout_droit);
 
@@ -565,11 +565,11 @@ describe('allée finale', () => {
 
 describe('incursion dans l’allée d’un adversaire', () => {
   test('on y entre pour prendre un pion sur le point de rentrer', () => {
-    // Le seuil du joueur 1 est la case 12. Un pion du joueur 0 est en 10 ; avec
+    // Le seuil du joueur 1 est la case 11. Un pion du joueur 0 est en 9 ; avec
     // un 4, il franchit le seuil et arrive à la case 1 de l'allée.
     const state = etat(
       [
-        { owner: 0, spot: surCase(10) },
+        { owner: 0, spot: surCase(9) },
         { owner: 1, spot: dansMaison(1, 1) },
       ],
       { current: 0, dice: [4, 2] },
@@ -589,11 +589,11 @@ describe('incursion dans l’allée d’un adversaire', () => {
   });
 
   test('on n’entre pas chez l’autre depuis son seuil', () => {
-    // Le seuil du joueur 1 est la case 12 ; un pion posé dessus ne doit pas
+    // Le seuil du joueur 1 est la case 11 ; un pion posé dessus ne doit pas
     // pouvoir bifurquer en arrière dans l'allée.
     const state = etat(
       [
-        { owner: 0, spot: surCase(12) },
+        { owner: 0, spot: surCase(11) },
         { owner: 1, spot: dansMaison(1, 1) },
       ],
       { current: 0, dice: [2, 5] },
@@ -606,7 +606,7 @@ describe('incursion dans l’allée d’un adversaire', () => {
   });
 
   test('sans proie, l’allée reste fermée', () => {
-    const state = etat([{ owner: 0, spot: surCase(10) }], { current: 0, dice: [4, 2] });
+    const state = etat([{ owner: 0, spot: surCase(9) }], { current: 0, dice: [4, 2] });
 
     assert.ok(
       !legalLudoMoves(state).some((m) => m.kind === 'raid'),

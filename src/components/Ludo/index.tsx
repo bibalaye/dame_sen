@@ -4,7 +4,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image';
 
 import Modal from '../Modal';
+import MultiplayerMenu from '../MultiplayerMenu';
 import LudoRules from '../LudoRules';
+import { useGameContext } from '@/context/GameContext';
 import { play, vibrate } from '@/lib/sound';
 import {
   LUDO_PLAYERS,
@@ -41,10 +43,11 @@ import {
   type Cell,
 } from '@/lib/ludoBoard';
 import { getMovePath, cellOfPawn } from '@/lib/ludoAnimation';
+import type { LudoNetworkPayload } from '@/context/SocketContext';
 import styles from './Ludo.module.css';
 
 interface LudoProps {
-  mode: 'solo' | 'pass';
+  mode: 'solo' | 'pass' | 'online';
   difficulty: LudoDifficulty;
   /** Nombre de joueurs assis autour du plateau. */
   playerCount?: number;
@@ -78,8 +81,36 @@ const Ludo: React.FC<LudoProps> = ({
   onExit,
   onFinish,
 }) => {
-  const [state, setState] = useState<LudoState>(() => createLudoGame(playerCount));
-  const sieges = useMemo(() => seatsFor(playerCount), [playerCount]);
+  const {
+    socket,
+    playerType,
+    roomId,
+    opponent,
+    opponentLeft,
+    acknowledgeOpponentLeft,
+    isWaitingForOpponent,
+    isGameStarted,
+    makeMove: sendMove,
+    goHome,
+  } = useGameContext();
+
+  const online = mode === 'online';
+
+  /**
+   * En ligne, le créateur (white) prend Rouge (0) et l'invité (black) Bleu (2).
+   * En solo/pass, le joueur humain est toujours 0.
+   */
+  const mySeat: LudoPlayerId = online
+    ? (playerType === 'black' ? 2 : 0)
+    : HUMAN;
+
+  const [state, setState] = useState<LudoState>(() =>
+    createLudoGame(online ? 2 : playerCount),
+  );
+  const sieges = useMemo(
+    () => (online ? [0, 2] as LudoPlayerId[] : seatsFor(playerCount)),
+    [online, playerCount],
+  );
   const [selected, setSelected] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState<string>('Bonne partie ! Touchez pour lancer.');
@@ -100,7 +131,12 @@ const Ludo: React.FC<LudoProps> = ({
   isAnimatingRef.current = animatingPawn !== null;
 
   const finished = state.status.kind !== 'playing';
-  const isHuman = mode === 'pass' || state.current === HUMAN;
+  const isHuman =
+    mode === 'pass'
+      ? true
+      : online
+        ? sieges.indexOf(state.current) !== -1 && state.current === mySeat
+        : state.current === HUMAN;
 
   const moves = useMemo(() => legalLudoMoves(state), [state]);
 
@@ -217,6 +253,29 @@ const Ludo: React.FC<LudoProps> = ({
 
   // --- Lancer de dés --------------------------------------------------------
 
+  /** Applique un résultat de dés (partagé entre roll local et réception réseau). */
+  const applyDice = useCallback((newDice: number[]) => {
+    const current = stateRef.current;
+    const next = rollInto(current, newDice);
+    stateRef.current = next;
+    setState(next);
+    setRolling(false);
+
+    const isDouble = newDice[0] === 6 && newDice[1] === 6;
+    const playerName = current.current === mySeat ? 'Vous' : LUDO_NAMES[current.current];
+
+    if (isDouble) {
+      play('promote');
+      vibrate([50, 40, 50]);
+      setAnnouncement(`⚡ DOUBLE SIX ! ${playerName} rejoue !`);
+      setIsHighlightAnnouncement(true);
+    } else {
+      play('click');
+      setAnnouncement(`🎲 ${playerName} a fait ${newDice[0]} et ${newDice[1]}`);
+      setIsHighlightAnnouncement(false);
+    }
+  }, [mySeat]);
+
   const roll = useCallback(() => {
     if (rolling || isAnimatingRef.current || finished) return;
     setRolling(true);
@@ -236,30 +295,20 @@ const Ludo: React.FC<LudoProps> = ({
     setTimeout(() => {
       clearInterval(interval);
       const newDice = rollDice();
-      const current = stateRef.current;
-      const next = rollInto(current, newDice);
-      stateRef.current = next;
-      setState(next);
-      setRolling(false);
 
-      const isDouble = newDice[0] === 6 && newDice[1] === 6;
-      const playerName = isHuman && current.current === HUMAN ? 'Vous' : LUDO_NAMES[current.current];
-
-      if (isDouble) {
-        play('promote');
-        vibrate([50, 40, 50]);
-        setAnnouncement(`⚡ DOUBLE SIX ! ${playerName} rejoue !`);
-        setIsHighlightAnnouncement(true);
-      } else {
-        play('click');
-        setAnnouncement(`🎲 ${playerName} a fait ${newDice[0]} et ${newDice[1]}`);
-        setIsHighlightAnnouncement(false);
+      // En ligne, on diffuse les dés au joueur adverse
+      if (online) {
+        sendMove({ type: 'ludo-roll', dice: newDice } as LudoNetworkPayload, 'white');
       }
+
+      applyDice(newDice);
     }, ROLL_DURATION);
-  }, [rolling, finished, isHuman, ROLL_DURATION]);
+  }, [rolling, finished, online, sendMove, applyDice, ROLL_DURATION]);
 
   const tourFini = turnIsOver(state);
-  const peutLancer = isHuman && !finished && !rolling && !animatingPawn && state.rolled.length === 0;
+  const peutLancer =
+    isHuman && !finished && !rolling && !animatingPawn && state.rolled.length === 0
+    && (!online || isGameStarted);
 
   // Fin de tour et passage au joueur suivant
   useEffect(() => {
@@ -320,9 +369,57 @@ const Ludo: React.FC<LudoProps> = ({
     if (!finished || reported.current) return;
     reported.current = true;
 
-    play(state.status.kind === 'win' && state.status.winner === HUMAN ? 'win' : 'lose');
-    if (state.status.kind === 'win') onFinish?.(state.status.winner === HUMAN);
-  }, [finished, state.status, onFinish]);
+    play(state.status.kind === 'win' && state.status.winner === mySeat ? 'win' : 'lose');
+    if (state.status.kind === 'win') onFinish?.(state.status.winner === mySeat);
+  }, [finished, state.status, onFinish, mySeat]);
+
+  // --- Réseau : synchronisation des coups de l'adversaire -------------------
+
+  useEffect(() => {
+    if (!online || !socket) return;
+
+    const handleOpponentMove = ({ move }: { move: LudoNetworkPayload }) => {
+      if (move.type === 'ludo-roll') {
+        // L'adversaire a lancé les dés — on applique le même tirage
+        setRolling(true);
+        setAnnouncement(`🎲 Lancer des dés en cours...`);
+        setIsHighlightAnnouncement(false);
+
+        const interval = setInterval(() => {
+          setRollingDiceValues([
+            1 + Math.floor(Math.random() * 6),
+            1 + Math.floor(Math.random() * 6),
+          ]);
+        }, 60);
+
+        setTimeout(() => {
+          clearInterval(interval);
+          applyDice([...move.dice]);
+        }, ROLL_DURATION);
+      } else if (move.type === 'ludo-move') {
+        // L'adversaire a déplacé un pion — on l'anime
+        executeMove(move.move);
+      }
+    };
+
+    socket.on('opponent-move', handleOpponentMove);
+    return () => {
+      socket.off('opponent-move', handleOpponentMove);
+    };
+  }, [online, socket, applyDice, executeMove, ROLL_DURATION]);
+
+  // Partie en ligne : on repart à neuf quand les deux joueurs sont connectés
+  useEffect(() => {
+    if (online && isGameStarted) {
+      const fresh = createLudoGame(2);
+      stateRef.current = fresh;
+      setState(fresh);
+      setSelected(null);
+      reported.current = false;
+      setAnnouncement('Bonne partie ! Touchez pour lancer.');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online, isGameStarted]);
 
   // --- Interaction ---------------------------------------------------------
 
@@ -332,6 +429,9 @@ const Ludo: React.FC<LudoProps> = ({
     const issue = resolvePawnTap(moves, selected, index);
 
     if (issue.kind === 'play') {
+      if (online) {
+        sendMove({ type: 'ludo-move', move: issue.move } as LudoNetworkPayload, 'white');
+      }
       executeMove(issue.move);
     } else if (issue.kind === 'select') {
       play('click');
@@ -345,7 +445,12 @@ const Ludo: React.FC<LudoProps> = ({
   const handleTarget = (spot: LudoMove['to']) => {
     if (animatingPawn || rolling) return;
     const move = movesForSelected.find((m) => sameSpot(m.to, spot));
-    if (move) executeMove(move);
+    if (move) {
+      if (online) {
+        sendMove({ type: 'ludo-move', move } as LudoNetworkPayload, 'white');
+      }
+      executeMove(move);
+    }
   };
 
   // --- Rendu & Trajectoires -------------------------------------------------
@@ -514,7 +619,11 @@ const Ludo: React.FC<LudoProps> = ({
                   aria-hidden="true"
                 />
                 <span className={styles.playerName}>
-                  {mode === 'solo' && player === HUMAN ? 'Vous' : LUDO_NAMES[player]}
+                  {player === mySeat
+                    ? 'Vous'
+                    : online && player !== mySeat
+                      ? (opponent ?? LUDO_NAMES[player])
+                      : LUDO_NAMES[player]}
                 </span>
                 <div className={styles.playerStats}>
                   <div className={styles.finishedIcons}>
@@ -741,18 +850,49 @@ const Ludo: React.FC<LudoProps> = ({
 
       {rulesOpen && <LudoRules onClose={() => setRulesOpen(false)} />}
 
+      {/* --- Modale adversaire parti (en ligne) --- */}
+      {online && opponentLeft && (
+        <Modal
+          variant="center"
+          title="Adversaire parti"
+          onClose={acknowledgeOpponentLeft}
+        >
+          <div className={styles.over}>
+            <p>
+              {opponentLeft} a quitté la partie. Vous pouvez l’attendre, ou
+              revenir à l’accueil.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+              <button type="button" className={`uiButton ${styles.again}`} onClick={goHome}>
+                Accueil
+              </button>
+              <button type="button" className={`uiButton`} onClick={acknowledgeOpponentLeft}>
+                Attendre
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* --- Modale salle d'attente (en ligne) --- */}
+      {online && !opponentLeft && (!roomId || isWaitingForOpponent) && (
+        <Modal title="Jouer à distance" dismissible={false} onClose={goHome}>
+          <MultiplayerMenu />
+        </Modal>
+      )}
+
       {/* --- Modale Fin de Partie --- */}
       {finished && state.status.kind === 'win' && (
         <Modal variant="center" dismissible={false} onClose={onExit}>
           <div className={styles.over}>
             <div className={styles.overCrown}>👑</div>
             <h2>
-              {state.status.winner === HUMAN
+              {state.status.winner === mySeat
                 ? 'Victoire Royale !'
-                : `${LUDO_NAMES[state.status.winner]} l’emporte !`}
+                : `${LUDO_NAMES[state.status.winner]} l'emporte !`}
             </h2>
             <button type="button" className={`uiButton ${styles.again}`} onClick={onExit}>
-              Rejouer
+              {online ? 'Accueil' : 'Rejouer'}
             </button>
           </div>
         </Modal>

@@ -541,7 +541,7 @@ const movesForPawn = (
      * dépassé — `jusquAuSeuil` vaut alors cinquante et un, et aucun dé n'y
      * suffit. Ce refus tient tout seul, sans garde supplémentaire.
      */
-    if (step < 0 || step >= HOME_LENGTH) continue;
+    if (jusquAuSeuil === 0 || step < 0 || step >= HOME_LENGTH) continue;
     if (!pathIsClear(state, spot.square, jusquAuSeuil, pawn.owner, sixes)) continue;
 
     const proie = state.pawns.findIndex(
@@ -584,8 +584,6 @@ export const legalLudoMoves = (state: LudoState): LudoMove[] => {
 
   for (const die of valeurs) {
     for (let i = 0; i < state.pawns.length; i++) {
-      // Le pion qui vient de prendre a fini son lancer.
-      if (i === state.lockedPawn) continue;
       moves.push(...movesForPawn(state, i, die, state.sixesThisTurn));
     }
   }

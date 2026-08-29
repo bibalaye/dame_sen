@@ -136,15 +136,15 @@ describe('priorités du joueur artificiel', () => {
   test('l’incursion dans une allée l’emporte sur une prise ordinaire', () => {
     const raid = etat(
       [
-        { owner: 0, spot: surCase(10) },
+        { owner: 0, spot: surCase(9) },
         { owner: 1, spot: dansMaison(1, 1) },
       ],
       { current: 0, dice: [4, 1] },
     );
     const ordinaire = etat(
       [
-        { owner: 0, spot: surCase(10) },
-        { owner: 1, spot: surCase(14) },
+        { owner: 0, spot: surCase(9) },
+        { owner: 1, spot: surCase(13) },
       ],
       { current: 0, dice: [4, 1] },
     );

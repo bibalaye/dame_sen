@@ -11,15 +11,23 @@ import React, {
 import { io, Socket } from 'socket.io-client';
 import type { Board, Move as DamesMove, Player } from '@/lib/engine';
 import type { MorpionMove } from '@/lib/morpion';
+import type { LudoMove } from '@/lib/ludo';
+
+/**
+ * Charge utile transmise pour une action de Ludo sur le réseau.
+ */
+export type LudoNetworkPayload =
+  | { readonly type: 'ludo-roll'; readonly dice: readonly number[] }
+  | { readonly type: 'ludo-move'; readonly move: LudoMove };
 
 /**
  * Un coup transmis sur le réseau. Le serveur ne fait que relayer : il n'a pas
- * à connaître les règles, et la même salle sert donc aux deux jeux.
+ * à connaître les règles, et la même salle sert donc aux trois jeux.
  */
-export type NetworkMove = DamesMove | MorpionMove;
+export type NetworkMove = DamesMove | MorpionMove | LudoNetworkPayload;
 
 /** Le jeu auquel se joue une salle. */
-export type RoomGame = 'dames' | 'morpion';
+export type RoomGame = 'dames' | 'morpion' | 'ludo';
 
 /** Port sur lequel `npm run server` expose le serveur temps réel. */
 const REALTIME_PORT = '5000';

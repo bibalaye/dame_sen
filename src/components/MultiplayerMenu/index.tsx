@@ -128,7 +128,7 @@ const MultiplayerMenu: React.FC = () => {
         {friendsOpen && (
           <FriendsPanel
             onClose={() => setFriendsOpen(false)}
-            room={{ id: roomId, game: kind === 'ludo' ? 'dames' : kind }}
+            room={{ id: roomId, game: kind }}
           />
         )}
         {isWaitingForOpponent ? (
@@ -137,9 +137,15 @@ const MultiplayerMenu: React.FC = () => {
           <p className={styles.connected}>Adversaire connecté : {opponent}</p>
         )}
         <p>
-          Vous jouez les pièces{' '}
+          Vous jouez les {kind === 'ludo' ? 'pions' : 'pièces'}{' '}
           <span className={styles.playerType}>
-            {playerType === 'white' ? 'blanches' : 'noires'}
+            {kind === 'ludo'
+              ? playerType === 'white'
+                ? 'rouges'
+                : 'bleus'
+              : playerType === 'white'
+                ? 'blanches'
+                : 'noires'}
           </span>
         </p>
         <button

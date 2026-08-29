@@ -41,7 +41,11 @@ const InviteBanner: React.FC = () => {
           <strong>{invite.displayName}</strong> vous invite
         </p>
         <p className={styles.what}>
-          {invite.game === 'dames' ? 'Une partie de dames' : 'Une partie de morpion'}
+          {invite.game === 'dames'
+            ? 'Une partie de dames'
+            : invite.game === 'ludo'
+              ? 'Une partie de ludo'
+              : 'Une partie de morpion'}
         </p>
       </div>
 

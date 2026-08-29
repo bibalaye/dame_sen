@@ -42,15 +42,10 @@ const MODES: ReadonlyArray<{
   detail: string;
   /** Le défi du jour repose sur une position de dames. */
   damesOnly?: boolean;
-  /**
-   * Le ludo ne se joue pas encore à distance : le dé devra venir du serveur,
-   * faute de quoi un client annoncerait ses propres six sans être contredit.
-   */
-  exceptLudo?: boolean;
 }> = [
   { id: 'solo', label: 'Solo', detail: 'Contre la machine' },
   { id: 'pass', label: 'À deux', detail: 'Sur cet appareil' },
-  { id: 'online', label: 'En ligne', detail: 'Par lien partagé', exceptLudo: true },
+  { id: 'online', label: 'En ligne', detail: 'Par lien partagé' },
   { id: 'daily', label: 'Défi', detail: 'Le puzzle du jour', damesOnly: true },
 ];
 
@@ -175,8 +170,7 @@ const HomeScreen: React.FC = () => {
   const [ludoPlayers, setLudoPlayers] = useState(4);
 
   const modes = MODES.filter(
-    (entry) =>
-      (kind === 'dames' || !entry.damesOnly) && (kind !== 'ludo' || !entry.exceptLudo),
+    (entry) => kind === 'dames' || !entry.damesOnly,
   );
 
   const opponents =
@@ -195,8 +189,6 @@ const HomeScreen: React.FC = () => {
       if (mode === 'daily') setMode('solo');
       if (difficulty === 'expert') setDifficulty('hard');
     }
-    // Le ludo ne se joue pas encore à distance.
-    if (next === 'ludo' && mode === 'online') setMode('solo');
   };
 
   const cta =

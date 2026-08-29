@@ -14,7 +14,7 @@ interface FriendsPanelProps {
    * Salle ouverte : le panneau propose alors d'y inviter, au lieu de se
    * contenter d'afficher la liste.
    */
-  room?: { readonly id: string; readonly game: 'dames' | 'morpion' };
+  room?: { readonly id: string; readonly game: 'dames' | 'morpion' | 'ludo' };
 }
 
 const titreDe = (id: string | null) =>

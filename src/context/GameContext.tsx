@@ -1337,15 +1337,7 @@ export const GameProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const createRoom = useCallback(
     (username: string) => {
-      /*
-       * La salle porte le jeu choisi : celui qui rejoindra ouvrira le même.
-       *
-       * Le ludo ne se joue pas encore à distance — le dé devra venir du serveur,
-       * faute de quoi un client annoncerait ses propres six sans être contredit.
-       * L'accueil ne propose donc pas le mode en ligne pour lui ; ce repli n'est
-       * qu'un garde-fou.
-       */
-      socketCreateRoom(username, kind === 'ludo' ? 'dames' : kind);
+      socketCreateRoom(username, kind);
       setIsWaitingForOpponent(true);
       setNotice("En attente d'un adversaire…");
     },

@@ -35,7 +35,7 @@ export const EMPTY_FRIENDS: FriendLists = { friends: [], received: [], sent: [] 
 export interface GameInvite {
   readonly id: string;
   readonly roomId: string;
-  readonly game: 'dames' | 'morpion';
+  readonly game: 'dames' | 'morpion' | 'ludo';
   readonly handle: string;
   readonly displayName: string;
 }
@@ -154,7 +154,7 @@ export const removeFriend = async (handle: string): Promise<Outcome> => {
 export const inviteFriend = async (
   handle: string,
   roomId: string,
-  game: 'dames' | 'morpion',
+  game: 'dames' | 'morpion' | 'ludo',
 ): Promise<Outcome> => {
   const supabase = getSupabase();
   if (!supabase) return { ok: false, error: 'Les comptes ne sont pas disponibles.' };

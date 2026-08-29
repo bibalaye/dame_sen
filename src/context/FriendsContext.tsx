@@ -53,7 +53,7 @@ interface FriendsContextType {
   invitePlayer: (
     handle: string,
     roomId: string,
-    game: 'dames' | 'morpion',
+    game: 'dames' | 'morpion' | 'ludo',
   ) => Promise<string | null>;
   /** Écarte l'invitation affichée, qu'on l'accepte ou qu'on la refuse. */
   clearInvite: () => void;
@@ -159,7 +159,7 @@ export const FriendsProvider: React.FC<{ children: ReactNode }> = ({ children })
   );
 
   const invitePlayer = useCallback(
-    async (handle: string, roomId: string, game: 'dames' | 'morpion') => {
+    async (handle: string, roomId: string, game: 'dames' | 'morpion' | 'ludo') => {
       const outcome = await inviteRemote(handle, roomId, game);
       return outcome.ok ? null : outcome.error;
     },

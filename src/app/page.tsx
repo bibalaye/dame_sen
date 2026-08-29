@@ -39,15 +39,13 @@ export default function Page() {
   }
 
   if (kind === 'ludo') {
-    // Le ludo tient son propre état : il ne partage ni plateau ni moteur avec
-    // les deux autres, et ne connaît pour l'instant que le solo et le duel
-    // sur un même appareil.
+    const ludoMode = mode === 'pass' ? 'pass' : mode === 'online' ? 'online' : 'solo';
     return (
       <AuthGate>
         <main>
           <InviteBanner />
           <Ludo
-            mode={mode === 'pass' ? 'pass' : 'solo'}
+            mode={ludoMode}
             playerCount={ludoPlayers}
             difficulty={
               difficulty === 'easy' ? 'easy' : difficulty === 'medium' ? 'medium' : 'hard'
@@ -56,9 +54,14 @@ export default function Page() {
             onFinish={(won) =>
               recordGame({
                 game: 'ludo',
-                mode: mode === 'pass' ? 'pass' : 'solo',
+                mode: ludoMode,
                 result: won ? 'win' : 'loss',
-                opponent: mode === 'pass' ? 'Duel local' : difficulty,
+                opponent:
+                  ludoMode === 'pass'
+                    ? 'Duel local'
+                    : ludoMode === 'online'
+                      ? 'En ligne'
+                      : difficulty,
                 playedAt: Date.now(),
               })
             }
