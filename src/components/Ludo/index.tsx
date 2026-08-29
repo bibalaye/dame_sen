@@ -11,8 +11,10 @@ import {
   earnsExtraRoll,
   endTurn,
   isCaptive,
+  blockadeOwner,
   legalLudoMoves,
   playLudoMove,
+  seatsFor,
   turnIsOver,
   rollDice,
   rollInto,
@@ -95,6 +97,8 @@ const Ludo: React.FC<LudoProps> = ({
   onFinish,
 }) => {
   const [state, setState] = useState<LudoState>(() => createLudoGame(playerCount));
+  /** Les coins occupés : à deux, on s'assoit en diagonale. */
+  const sieges = seatsFor(playerCount);
   const [selected, setSelected] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [rolling, setRolling] = useState(false);
@@ -128,7 +132,7 @@ const Ludo: React.FC<LudoProps> = ({
       const next = playLudoMove(current, move);
       if (next === current) return current;
 
-      if (move.captures !== undefined) {
+      if (move.captures?.length) {
         play('capture');
         vibrate(30);
       } else {
@@ -244,10 +248,8 @@ const Ludo: React.FC<LudoProps> = ({
       const square = TRACK_CELLS.findIndex((c) => c.row === row && c.col === col);
       const proprietaire = square === -1 ? null : startOwner(square);
 
-      const allee = LUDO_PLAYERS.find(
-        (p) =>
-          p < playerCount &&
-          homeCells(p).some((c) => c.row === row && c.col === col),
+      const allee = LUDO_PLAYERS.find((p) =>
+        homeCells(p).some((c) => c.row === row && c.col === col),
       );
 
       const cible = targets.find((t) => t.cell.row === row && t.cell.col === col);
@@ -320,18 +322,27 @@ const Ludo: React.FC<LudoProps> = ({
 
       <div className={styles.boardWrapper}>
         <div className={styles.board}>
-          {/* Les quatre écuries, en fond */}
-          {LUDO_PLAYERS.filter((p) => p < playerCount).map((player) => {
+          {/*
+            Les quatre camps sont dessinés même quand deux joueurs seulement
+            s'affrontent : un plateau amputé de ses coins ne ressemble plus à un
+            plateau. Les camps inoccupés sont simplement plus pâles, et n'ont
+            pas de pions.
+          */}
+          {LUDO_PLAYERS.map((player) => {
             const area = stableArea(player);
+            const assis = sieges.includes(player);
+
             return (
               <div
                 key={`stable-${player}`}
-                className={styles.stable}
+                className={`${styles.stable} ${assis ? '' : styles.stableEmpty}`}
                 style={{
                   gridRow: `${area.row + 1} / span ${area.size}`,
                   gridColumn: `${area.col + 1} / span ${area.size}`,
                   borderColor: LUDO_COLORS[player],
-                  background: `color-mix(in srgb, ${LUDO_COLORS[player]} 18%, var(--surface))`,
+                  background: `color-mix(in srgb, ${LUDO_COLORS[player]} ${
+                    assis ? 18 : 7
+                  }%, var(--surface))`,
                 }}
               />
             );
@@ -381,11 +392,23 @@ const Ludo: React.FC<LudoProps> = ({
                     {indices.length}
                   </span>
                 )}
+                {/*
+                  Le liseré ne marque qu'un vrai barrage — à la porte de son
+                  propriétaire. Ailleurs, deux pions empilés ne protègent rien :
+                  les signaler pareillement laisserait croire le contraire.
+                */}
+                {state.pawns[premier].spot.zone === 'track' &&
+                  blockadeOwner(state, state.pawns[premier].spot.square) !== null && (
+                    <span className={styles.blockade} aria-hidden="true" />
+                  )}
+
+                {/* Deux pions hors de leur porte partent ensemble si on les
+                    prend : le danger doit se voir. */}
                 {indices.length >= 2 &&
                   state.pawns[premier].spot.zone === 'track' &&
-                  indices.every(
-                    (i) => state.pawns[i].owner === state.pawns[premier].owner,
-                  ) && <span className={styles.blockade} aria-hidden="true" />}
+                  blockadeOwner(state, state.pawns[premier].spot.square) === null && (
+                    <span className={styles.exposed} aria-hidden="true" />
+                  )}
               </div>
             );
           })}

@@ -175,9 +175,10 @@ describe('priorités du joueur artificiel', () => {
     assert.ok(scoreLudoMove(state, expose!) < 0, 'se mettre à portée doit coûter');
   });
 
-  test('se poser à deux annule le risque', () => {
-    // Le pion rejoint l'un des siens : le barrage ne se prend pas.
-    const state = etat(
+  test('s’empiler hors de sa porte aggrave le risque au lieu de l’écarter', () => {
+    // Deux pions sur la même case se prennent ensemble : les poser devant un
+    // adversaire coûte le double.
+    const empile = etat(
       [
         { owner: 0, spot: surCase(20) },
         { owner: 0, spot: surCase(23) },
@@ -185,14 +186,45 @@ describe('priorités du joueur artificiel', () => {
       ],
       { current: 0, dice: [3, 1] },
     );
+    const seul = etat(
+      [
+        { owner: 0, spot: surCase(20) },
+        { owner: 1, spot: surCase(21) },
+      ],
+      { current: 0, dice: [3, 1] },
+    );
+
+    const versLaPile = legalLudoMoves(empile).find(
+      (m) => m.to.zone === 'track' && m.to.square === 23,
+    )!;
+    const versLeVide = legalLudoMoves(seul).find(
+      (m) => m.to.zone === 'track' && m.to.square === 23,
+    )!;
+
+    assert.ok(
+      scoreLudoMove(empile, versLaPile) < scoreLudoMove(seul, versLeVide),
+      'rejoindre un des siens sous la menace doit coûter davantage',
+    );
+  });
+
+  test('à sa porte, s’empiler protège', () => {
+    // La porte du joueur 0 est la case 51 ; un pion en 50 peut l'y rejoindre.
+    const state = etat(
+      [
+        { owner: 0, spot: surCase(50) },
+        { owner: 0, spot: surCase(51) },
+        { owner: 1, spot: surCase(48) },
+      ],
+      { current: 0, dice: [1, 4] },
+    );
 
     const barrage = legalLudoMoves(state).find(
-      (m) => m.to.zone === 'track' && m.to.square === 23,
+      (m) => m.to.zone === 'track' && m.to.square === 51,
     );
-    assert.ok(barrage);
+    assert.ok(barrage, 'le coup doit exister');
     assert.ok(
       scoreLudoMove(state, barrage!) > 0,
-      'former un barrage sur une case menacée reste bon',
+      'fermer sa porte sous la menace reste un bon coup',
     );
   });
 

@@ -20,6 +20,7 @@ import {
   HOME_LENGTH,
   PIECES_PER_PLAYER,
   TRACK,
+  homeGate,
   legalLudoMoves,
   progressOf,
   type LudoMove,
@@ -102,8 +103,13 @@ export const threatsOn = (
   return menaces;
 };
 
-/** Vrai si deux pions du joueur se retrouveraient sur la case d'arrivée. */
-const formeBarrage = (state: LudoState, move: LudoMove): boolean => {
+/**
+ * Vrai si le coup pose deux pions du joueur sur la même case.
+ *
+ * Ce n'est un barrage qu'à sa propre porte. Ailleurs, c'est le contraire d'une
+ * protection : un adversaire qui tombe dessus prend les deux d'un coup.
+ */
+const empile = (state: LudoState, move: LudoMove): boolean => {
   if (move.to.zone !== 'track') return false;
 
   const cible = move.to.square;
@@ -116,6 +122,12 @@ const formeBarrage = (state: LudoState, move: LudoMove): boolean => {
   );
 };
 
+/** Vrai si l'empilement se fait à la porte du joueur, là où il protège. */
+const formeBarrage = (state: LudoState, move: LudoMove): boolean =>
+  move.to.zone === 'track' &&
+  move.to.square === homeGate(state.current) &&
+  empile(state, move);
+
 /**
  * Ce que vaut un coup. Le score n'a pas d'unité : seul l'ordre compte.
  *
@@ -127,14 +139,16 @@ export const scoreLudoMove = (state: LudoState, move: LudoMove): number => {
   let score = 0;
 
   // --- Ce que le coup accomplit --------------------------------------------
-  if (move.captures !== undefined) {
-    const proie = state.pawns[move.captures];
+  for (const index of move.captures ?? []) {
+    const proie = state.pawns[index];
 
     if (move.kind === 'raid') {
       // La victime était dans son allée : elle repart de zéro, et de loin.
       score += SCORES.raid;
       if (proie.spot.zone === 'home') score += proie.spot.step * 6;
     } else {
+      // Chaque pion compte : hors de sa porte, deux pions empilés se prennent
+      // ensemble, et le coup vaut alors le double.
       score += SCORES.capture;
       // Un pion avancé coûte plus cher à son propriétaire qu'un pion frais.
       score += progressOf(proie);
@@ -160,9 +174,14 @@ export const scoreLudoMove = (state: LudoState, move: LudoMove): number => {
 
   if (move.to.zone === 'track') {
     const menaceApres = threatsOn(state, move.to.square, state.current);
-    // Un barrage ne se prend pas : s'y poser à deux annule le risque.
+
     if (menaceApres > 0 && !formeBarrage(state, move)) {
-      score += SCORES.exposed * menaceApres;
+      /*
+       * Un barrage ne se prend pas ; ailleurs, s'empiler double la perte au
+       * lieu de la conjurer, puisque les deux pions partent ensemble. C'est le
+       * piège de cette variante, et l'adversaire doit l'éviter.
+       */
+      score += SCORES.exposed * menaceApres * (empile(state, move) ? 2 : 1);
     }
   }
 

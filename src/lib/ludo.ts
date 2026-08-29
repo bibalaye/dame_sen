@@ -61,6 +61,16 @@ export const START_SQUARE: Readonly<Record<LudoPlayerId, number>> = {
 export const homeGate = (player: LudoPlayerId): number =>
   (START_SQUARE[player] - 1 + TRACK) % TRACK;
 
+/**
+ * Les coins occupés selon le nombre de joueurs.
+ *
+ * À deux, on s'assoit en diagonale : côte à côte, l'un aurait la moitié du
+ * circuit d'avance sur l'autre avant même le premier lancer. À trois, les
+ * places se suivent — quatre coins ne se partagent pas équitablement en trois.
+ */
+export const seatsFor = (playerCount: number): readonly LudoPlayerId[] =>
+  playerCount === 2 ? [0, 2] : LUDO_PLAYERS.slice(0, playerCount);
+
 // --- Position d'un pion ------------------------------------------------------
 
 /**
@@ -134,8 +144,7 @@ export const MAX_EXTRA_ROLLS = 3;
 export const createLudoGame = (playerCount = 4): LudoState => {
   const pawns: Pawn[] = [];
 
-  for (const player of LUDO_PLAYERS) {
-    if (player >= playerCount) continue;
+  for (const player of seatsFor(playerCount)) {
     for (let i = 0; i < PIECES_PER_PLAYER; i++) {
       pawns.push({ owner: player, spot: { zone: 'stable', host: player } });
     }
@@ -159,8 +168,14 @@ export const pawnsOnSquare = (state: LudoState, square: number): Pawn[] =>
   state.pawns.filter((p) => p.spot.zone === 'track' && p.spot.square === square);
 
 /**
- * Le joueur qui tient une case en barrage, s'il y en a un : deux pions ou plus
- * d'une même couleur au même endroit.
+ * Le joueur qui tient une case en barrage, s'il y en a un.
+ *
+ * Un barrage ne se forme qu'à sa propre porte — la case du circuit qui précède
+ * son allée. Ailleurs, empiler deux pions ne protège rien : au contraire, un
+ * adversaire qui tombe dessus les prend tous les deux d'un coup.
+ *
+ * C'est ce qui donne son prix à la porte : le seul endroit du plateau où l'on
+ * puisse se poser à deux sans risque, et le seul qu'on puisse fermer.
  */
 export const blockadeOwner = (
   state: LudoState,
@@ -170,7 +185,9 @@ export const blockadeOwner = (
   if (dessus.length < 2) return null;
 
   const premier = dessus[0].owner;
-  return dessus.every((p) => p.owner === premier) ? premier : null;
+  if (!dessus.every((p) => p.owner === premier)) return null;
+
+  return square === homeGate(premier) ? premier : null;
 };
 
 /** Les pions d'un joueur qui ont fini leur course. */
@@ -201,8 +218,13 @@ export interface LudoMove {
   readonly die: number;
   /** Où le pion se retrouve. */
   readonly to: PawnSpot;
-  /** Pion capturé, le cas échéant : il passera dans l'écurie du joueur. */
-  readonly captures?: number;
+  /**
+   * Pions capturés, le cas échéant : ils passeront dans l'écurie du joueur.
+   *
+   * Il peut y en avoir plusieurs : hors de sa porte, deux pions empilés se font
+   * prendre ensemble.
+   */
+  readonly captures?: readonly number[];
 }
 
 /**
@@ -235,20 +257,24 @@ const landingOnTrack = (
   state: LudoState,
   square: number,
   mover: LudoPlayerId,
-): { allowed: boolean; captures?: number } => {
+): { allowed: boolean; captures?: readonly number[] } => {
   const dessus = pawnsOnSquare(state, square);
   if (dessus.length === 0) return { allowed: true };
 
-  // Ses propres pions s'empilent : c'est ainsi qu'on forme un barrage.
+  // On s'empile volontiers sur les siens — en sachant qu'ailleurs qu'à sa
+  // porte, cela expose les deux pions d'un seul coup.
   if (dessus.every((p) => p.owner === mover)) return { allowed: true };
 
-  // Un barrage adverse ne se prend pas : il faut d'abord le défaire.
-  if (dessus.length > 1) return { allowed: false };
+  // Un barrage adverse ne se prend pas : il faut d'abord le défaire. Il n'y en
+  // a qu'à la porte de son propriétaire.
+  if (blockadeOwner(state, square) !== null) return { allowed: false };
 
-  const proie = dessus[0];
+  // Tout ce qui appartient à d'autres est pris, fût-ce deux pions à la fois.
   return {
     allowed: true,
-    captures: state.pawns.indexOf(proie),
+    captures: dessus
+      .filter((p) => p.owner !== mover)
+      .map((p) => state.pawns.indexOf(p)),
   };
 };
 
@@ -291,7 +317,7 @@ const movesForPawn = (
         pawn: index,
         die,
         to: { zone: 'track', square },
-        ...(landing.captures !== undefined ? { captures: landing.captures } : {}),
+        ...(landing.captures?.length ? { captures: landing.captures } : {}),
       },
     ];
   }
@@ -324,7 +350,7 @@ const movesForPawn = (
         pawn: index,
         die,
         to: { zone: 'track', square },
-        ...(landing.captures !== undefined ? { captures: landing.captures } : {}),
+        ...(landing.captures?.length ? { captures: landing.captures } : {}),
       },
     ];
   }
@@ -403,7 +429,7 @@ const movesForPawn = (
         pawn: index,
         die,
         to: { zone: 'track', square },
-        ...(landing.captures !== undefined ? { captures: landing.captures } : {}),
+        ...(landing.captures?.length ? { captures: landing.captures } : {}),
       });
     }
   }
@@ -412,7 +438,7 @@ const movesForPawn = (
   // Uniquement pour prendre : sans proie, l'allée reste fermée, et l'on n'y
   // entre donc jamais par mégarde.
   for (const host of LUDO_PLAYERS) {
-    if (host === pawn.owner || host >= state.playerCount) continue;
+    if (host === pawn.owner || !seatsFor(state.playerCount).includes(host)) continue;
 
     const gate = homeGate(host);
     const jusquAuSeuil = (gate - spot.square + TRACK) % TRACK;
@@ -435,7 +461,7 @@ const movesForPawn = (
       pawn: index,
       die,
       to: { zone: 'home', host, step },
-      captures: proie,
+      captures: [proie],
     });
   }
 
@@ -471,9 +497,13 @@ export const legalLudoMoves = (state: LudoState): LudoMove[] => {
 
 // --- Déroulement -------------------------------------------------------------
 
-/** Le joueur suivant, en sautant les places vides. */
-export const nextPlayer = (state: LudoState): LudoPlayerId =>
-  (((state.current + 1) % state.playerCount) as LudoPlayerId);
+/** Le joueur suivant, en suivant les coins occupés. */
+export const nextPlayer = (state: LudoState): LudoPlayerId => {
+  const seats = seatsFor(state.playerCount);
+  const place = seats.indexOf(state.current);
+
+  return seats[(place + 1) % seats.length];
+};
 
 /**
  * Pose les dés d'un tour. Les valeurs viennent de l'appelant : le module ne
@@ -516,11 +546,11 @@ export const playLudoMove = (state: LudoState, move: LudoMove): LudoState => {
   const pawns = [...state.pawns];
   const mover = pawns[move.pawn];
 
-  // La prise d'abord : le pion pris rejoint l'écurie de son ravisseur, et non
-  // la sienne. C'est ce qui fait toute la différence avec le Ludo répandu.
-  if (move.captures !== undefined) {
-    pawns[move.captures] = {
-      ...pawns[move.captures],
+  // La prise d'abord : les pions pris rejoignent l'écurie de leur ravisseur, et
+  // non la leur. C'est ce qui fait toute la différence avec le Ludo répandu.
+  for (const proie of move.captures ?? []) {
+    pawns[proie] = {
+      ...pawns[proie],
       spot: { zone: 'stable', host: state.current },
     };
   }

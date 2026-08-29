@@ -289,3 +289,20 @@
     width: min(94vw, 54vh, 520px);
   }
 }
+
+/* Un camp sans joueur reste dessiné, mais s'efface : le plateau garde sa forme
+   sans faire croire qu'une place est prise. */
+.stableEmpty {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+/* Deux pions empilés hors de leur porte se prennent ensemble : le liseré rouge
+   du barrage dirait le contraire, celui-ci prévient du risque. */
+.exposed {
+  position: absolute;
+  inset: -2px;
+  border: 2px dashed color-mix(in srgb, var(--red) 70%, transparent);
+  border-radius: 4px;
+  z-index: 1;
+}
