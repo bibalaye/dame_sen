@@ -1,0 +1,575 @@
+/**
+ * Le Ludo, variante sénégalaise.
+ *
+ * Trois règles le distinguent du Ludo répandu ailleurs, et toutes trois
+ * touchent au même point : un pion n'est pas toujours chez lui.
+ *
+ *   — Un pion capturé ne rentre pas dans sa propre écurie mais dans celle de
+ *     son ravisseur, où il reste prisonnier jusqu'à ce que son propriétaire
+ *     fasse un 6.
+ *   — Deux pions d'une même couleur sur une case forment un barrage que rien
+ *     ne traverse, sauf un double-six.
+ *   — L'allée finale d'un joueur n'est pas un sanctuaire : on peut y entrer
+ *     pour prendre un pion sur le point de rentrer — mais uniquement pour cela,
+ *     et il faut ensuite un 6 par case pour en ressortir.
+ *
+ * D'où le modèle : la position d'un pion porte toujours deux identités — à qui
+ * il appartient, et chez qui il se trouve. Une fois cela posé, les trois règles
+ * s'écrivent d'elles-mêmes au lieu d'être des cas particuliers greffés.
+ *
+ * Le module est pur : aucun dé n'y est tiré. Les valeurs arrivent de
+ * l'extérieur, ce qui rend un jeu de hasard entièrement déterministe à tester —
+ * et permettra plus tard au serveur d'être seul maître du dé, puisqu'un client
+ * qui annonce ses propres 6 n'est contredit par personne.
+ */
+
+export type LudoPlayerId = 0 | 1 | 2 | 3;
+
+export const LUDO_PLAYERS: readonly LudoPlayerId[] = [0, 1, 2, 3];
+
+/** Cases du circuit commun : quatre bras de treize. */
+export const TRACK = 52;
+
+/** Longueur de l'allée finale, la « maison ». */
+export const HOME_LENGTH = 6;
+
+export const PIECES_PER_PLAYER = 4;
+
+/** Nombre de dés lancés par tour. */
+export const DICE_COUNT = 2;
+
+/**
+ * Où chaque joueur pose ses pions en sortant. Les départs sont espacés d'un
+ * quart de circuit : c'est ce qui donne à chacun le même trajet.
+ */
+export const START_SQUARE: Readonly<Record<LudoPlayerId, number>> = {
+  0: 0,
+  1: 13,
+  2: 26,
+  3: 39,
+};
+
+/**
+ * Dernière case du circuit avant l'allée d'un joueur : celle qui précède son
+ * départ. C'est aussi le point par lequel un adversaire peut s'introduire chez
+ * lui.
+ */
+export const homeGate = (player: LudoPlayerId): number =>
+  (START_SQUARE[player] - 1 + TRACK) % TRACK;
+
+// --- Position d'un pion ------------------------------------------------------
+
+/**
+ * `host` désigne chez qui se trouve le pion, qui n'est pas forcément son
+ * propriétaire : c'est là que tiennent la capture-prisonnier et l'incursion
+ * dans une allée adverse.
+ */
+export type PawnSpot =
+  | { readonly zone: 'stable'; readonly host: LudoPlayerId }
+  | { readonly zone: 'track'; readonly square: number }
+  | { readonly zone: 'home'; readonly host: LudoPlayerId; readonly step: number }
+  | { readonly zone: 'finished' };
+
+export interface Pawn {
+  readonly owner: LudoPlayerId;
+  readonly spot: PawnSpot;
+}
+
+/** Vrai si le pion dort dans l'écurie d'un adversaire. */
+export const isCaptive = (pawn: Pawn): boolean =>
+  pawn.spot.zone === 'stable' && pawn.spot.host !== pawn.owner;
+
+/** Vrai si le pion est englué dans l'allée de quelqu'un d'autre. */
+export const isTrespassing = (pawn: Pawn): boolean =>
+  pawn.spot.zone === 'home' && pawn.spot.host !== pawn.owner;
+
+/** Vrai si le pion attend chez lui de pouvoir entrer en jeu. */
+export const isResting = (pawn: Pawn): boolean =>
+  pawn.spot.zone === 'stable' && pawn.spot.host === pawn.owner;
+
+/**
+ * Distance parcourue depuis la sortie, de 0 à 51. Un pion sort toujours sur sa
+ * case de départ et ne fait qu'un tour : la mesure est donc sans ambiguïté.
+ */
+export const progressOf = (pawn: Pawn): number => {
+  if (pawn.spot.zone !== 'track') return 0;
+  return (pawn.spot.square - START_SQUARE[pawn.owner] + TRACK) % TRACK;
+};
+
+// --- État de la partie -------------------------------------------------------
+
+export type LudoStatus =
+  | { readonly kind: 'playing' }
+  | { readonly kind: 'win'; readonly winner: LudoPlayerId };
+
+export interface LudoState {
+  readonly pawns: readonly Pawn[];
+  readonly current: LudoPlayerId;
+  /** Dés lancés qu'il reste à employer. Vide tant qu'on n'a pas lancé. */
+  readonly dice: readonly number[];
+  /**
+   * Relances déjà accordées dans ce tour. Un six rend la main, mais pas
+   * indéfiniment : sans plafond, une série chanceuse tiendrait le tour ouvert
+   * sans fin.
+   */
+  readonly extraRolls: number;
+  readonly status: LudoStatus;
+  /** Nombre de joueurs réellement assis : les autres pions restent au repos. */
+  readonly playerCount: number;
+}
+
+/** Au-delà, la main passe même sur un six. */
+export const MAX_EXTRA_ROLLS = 3;
+
+export const createLudoGame = (playerCount = 4): LudoState => {
+  const pawns: Pawn[] = [];
+
+  for (const player of LUDO_PLAYERS) {
+    if (player >= playerCount) continue;
+    for (let i = 0; i < PIECES_PER_PLAYER; i++) {
+      pawns.push({ owner: player, spot: { zone: 'stable', host: player } });
+    }
+  }
+
+  return {
+    pawns,
+    current: 0,
+    dice: [],
+    extraRolls: 0,
+    status: { kind: 'playing' },
+    playerCount,
+  };
+};
+
+// --- Lecture du plateau ------------------------------------------------------
+
+/** Les pions posés sur une case du circuit. */
+export const pawnsOnSquare = (state: LudoState, square: number): Pawn[] =>
+  state.pawns.filter((p) => p.spot.zone === 'track' && p.spot.square === square);
+
+/**
+ * Le joueur qui tient une case en barrage, s'il y en a un : deux pions ou plus
+ * d'une même couleur au même endroit.
+ */
+export const blockadeOwner = (
+  state: LudoState,
+  square: number,
+): LudoPlayerId | null => {
+  const dessus = pawnsOnSquare(state, square);
+  if (dessus.length < 2) return null;
+
+  const premier = dessus[0].owner;
+  return dessus.every((p) => p.owner === premier) ? premier : null;
+};
+
+/** Les pions d'un joueur qui ont fini leur course. */
+export const finishedCount = (state: LudoState, player: LudoPlayerId): number =>
+  state.pawns.filter((p) => p.owner === player && p.spot.zone === 'finished').length;
+
+// --- Coups -------------------------------------------------------------------
+
+export type LudoMoveKind =
+  /** Sortir un pion de sa propre écurie. */
+  | 'enter'
+  /** Ramener chez soi un pion prisonnier. */
+  | 'free'
+  /** Avancer sur le circuit. */
+  | 'advance'
+  /** Entrer dans sa propre allée, ou y progresser. */
+  | 'home'
+  /** S'introduire dans l'allée d'un adversaire pour l'y prendre. */
+  | 'raid'
+  /** Se dégager, case par case, de l'allée où l'on s'est aventuré. */
+  | 'escape';
+
+export interface LudoMove {
+  readonly kind: LudoMoveKind;
+  /** Rang du pion dans `state.pawns`. */
+  readonly pawn: number;
+  /** Valeur du dé employée par ce coup. */
+  readonly die: number;
+  /** Où le pion se retrouve. */
+  readonly to: PawnSpot;
+  /** Pion capturé, le cas échéant : il passera dans l'écurie du joueur. */
+  readonly captures?: number;
+}
+
+/**
+ * Vrai si le chemin entre deux cases du circuit est libre de barrage.
+ *
+ * On regarde chaque case franchie ainsi que l'arrivée : un barrage arrête, il
+ * ne se saute pas. Le joueur qui tient le barrage n'est évidemment pas gêné par
+ * le sien.
+ */
+const pathIsClear = (
+  state: LudoState,
+  from: number,
+  steps: number,
+  mover: LudoPlayerId,
+  doubleSix: boolean,
+): boolean => {
+  // Un double-six force n'importe quel barrage : c'est la seule clé.
+  if (doubleSix) return true;
+
+  for (let i = 1; i <= steps; i++) {
+    const square = (from + i) % TRACK;
+    const owner = blockadeOwner(state, square);
+    if (owner !== null && owner !== mover) return false;
+  }
+  return true;
+};
+
+/** Ce qui se trouve à l'arrivée : une prise, un refus, ou rien. */
+const landingOnTrack = (
+  state: LudoState,
+  square: number,
+  mover: LudoPlayerId,
+): { allowed: boolean; captures?: number } => {
+  const dessus = pawnsOnSquare(state, square);
+  if (dessus.length === 0) return { allowed: true };
+
+  // Ses propres pions s'empilent : c'est ainsi qu'on forme un barrage.
+  if (dessus.every((p) => p.owner === mover)) return { allowed: true };
+
+  // Un barrage adverse ne se prend pas : il faut d'abord le défaire.
+  if (dessus.length > 1) return { allowed: false };
+
+  const proie = dessus[0];
+  return {
+    allowed: true,
+    captures: state.pawns.indexOf(proie),
+  };
+};
+
+/** Les coups qu'un pion peut jouer avec une valeur de dé donnée. */
+const movesForPawn = (
+  state: LudoState,
+  index: number,
+  die: number,
+  doubleSix: boolean,
+): LudoMove[] => {
+  const pawn = state.pawns[index];
+  if (pawn.owner !== state.current) return [];
+
+  const moves: LudoMove[] = [];
+  const spot = pawn.spot;
+
+  // --- Écurie ---------------------------------------------------------------
+  if (spot.zone === 'stable') {
+    if (die !== 6) return [];
+
+    // Prisonnier : le six le rend à son propriétaire, pas au plateau.
+    if (spot.host !== pawn.owner) {
+      return [
+        {
+          kind: 'free',
+          pawn: index,
+          die,
+          to: { zone: 'stable', host: pawn.owner },
+        },
+      ];
+    }
+
+    const square = START_SQUARE[pawn.owner];
+    const landing = landingOnTrack(state, square, pawn.owner);
+    if (!landing.allowed) return [];
+
+    return [
+      {
+        kind: 'enter',
+        pawn: index,
+        die,
+        to: { zone: 'track', square },
+        ...(landing.captures !== undefined ? { captures: landing.captures } : {}),
+      },
+    ];
+  }
+
+  if (spot.zone === 'finished') return [];
+
+  // --- Allée d'un adversaire : on n'en sort qu'à coups de six ---------------
+  if (spot.zone === 'home' && spot.host !== pawn.owner) {
+    if (die !== 6) return [];
+
+    // Une case par six, jusqu'à retrouver le circuit par où l'on est entré.
+    if (spot.step > 0) {
+      return [
+        {
+          kind: 'escape',
+          pawn: index,
+          die,
+          to: { zone: 'home', host: spot.host, step: spot.step - 1 },
+        },
+      ];
+    }
+
+    const square = homeGate(spot.host);
+    const landing = landingOnTrack(state, square, pawn.owner);
+    if (!landing.allowed) return [];
+
+    return [
+      {
+        kind: 'escape',
+        pawn: index,
+        die,
+        to: { zone: 'track', square },
+        ...(landing.captures !== undefined ? { captures: landing.captures } : {}),
+      },
+    ];
+  }
+
+  // --- Sa propre allée : compte exact ---------------------------------------
+  if (spot.zone === 'home') {
+    const step = spot.step + die;
+
+    // La dernière case franchie mène au centre ; au-delà, le coup est refusé.
+    if (step === HOME_LENGTH) {
+      return [{ kind: 'home', pawn: index, die, to: { zone: 'finished' } }];
+    }
+    if (step > HOME_LENGTH) return [];
+
+    // On ne saute pas par-dessus l'un des siens dans l'allée.
+    const occupe = state.pawns.some(
+      (p) =>
+        p.spot.zone === 'home' &&
+        p.spot.host === spot.host &&
+        p.spot.step === step,
+    );
+    if (occupe) return [];
+
+    return [
+      {
+        kind: 'home',
+        pawn: index,
+        die,
+        to: { zone: 'home', host: spot.host, step },
+      },
+    ];
+  }
+
+  // --- Circuit --------------------------------------------------------------
+  const progress = progressOf(pawn);
+  const restant = TRACK - progress;
+
+  // Le pion boucle son tour et entre dans sa propre allée.
+  if (die >= restant) {
+    const step = die - restant;
+
+    if (!pathIsClear(state, spot.square, restant - 1, pawn.owner, doubleSix)) {
+      return [];
+    }
+
+    if (step === HOME_LENGTH) {
+      moves.push({ kind: 'home', pawn: index, die, to: { zone: 'finished' } });
+    } else if (step < HOME_LENGTH) {
+      const occupe = state.pawns.some(
+        (p) =>
+          p.spot.zone === 'home' &&
+          p.spot.host === pawn.owner &&
+          p.spot.step === step,
+      );
+      if (!occupe) {
+        moves.push({
+          kind: 'home',
+          pawn: index,
+          die,
+          to: { zone: 'home', host: pawn.owner, step },
+        });
+      }
+    }
+    // Au-delà de l'allée, le compte ne tombe pas juste : aucun coup.
+    return moves;
+  }
+
+  // Avance ordinaire.
+  if (pathIsClear(state, spot.square, die, pawn.owner, doubleSix)) {
+    const square = (spot.square + die) % TRACK;
+    const landing = landingOnTrack(state, square, pawn.owner);
+
+    if (landing.allowed) {
+      moves.push({
+        kind: 'advance',
+        pawn: index,
+        die,
+        to: { zone: 'track', square },
+        ...(landing.captures !== undefined ? { captures: landing.captures } : {}),
+      });
+    }
+  }
+
+  // --- Incursion chez un adversaire ----------------------------------------
+  // Uniquement pour prendre : sans proie, l'allée reste fermée, et l'on n'y
+  // entre donc jamais par mégarde.
+  for (const host of LUDO_PLAYERS) {
+    if (host === pawn.owner || host >= state.playerCount) continue;
+
+    const gate = homeGate(host);
+    const jusquAuSeuil = (gate - spot.square + TRACK) % TRACK;
+    const step = die - jusquAuSeuil - 1;
+
+    if (jusquAuSeuil >= die || step < 0 || step >= HOME_LENGTH) continue;
+    if (!pathIsClear(state, spot.square, jusquAuSeuil, pawn.owner, doubleSix)) continue;
+
+    const proie = state.pawns.findIndex(
+      (p) =>
+        p.spot.zone === 'home' &&
+        p.spot.host === host &&
+        p.spot.step === step &&
+        p.owner !== pawn.owner,
+    );
+    if (proie === -1) continue;
+
+    moves.push({
+      kind: 'raid',
+      pawn: index,
+      die,
+      to: { zone: 'home', host, step },
+      captures: proie,
+    });
+  }
+
+  return moves;
+};
+
+/** Vrai si le lancer en cours est un double-six, la clé des barrages. */
+export const isDoubleSix = (dice: readonly number[]): boolean =>
+  dice.length >= 2 && dice.every((d) => d === 6);
+
+/**
+ * Tous les coups jouables avec les dés restants.
+ *
+ * Le double-six ne compte que tant que les deux dés sont intacts : après en
+ * avoir dépensé un, il ne reste qu'un six ordinaire, et les barrages tiennent
+ * de nouveau.
+ */
+export const legalLudoMoves = (state: LudoState): LudoMove[] => {
+  if (state.status.kind !== 'playing') return [];
+
+  const doubleSix = isDoubleSix(state.dice);
+  const valeurs = [...new Set(state.dice)];
+  const moves: LudoMove[] = [];
+
+  for (const die of valeurs) {
+    for (let i = 0; i < state.pawns.length; i++) {
+      moves.push(...movesForPawn(state, i, die, doubleSix));
+    }
+  }
+
+  return moves;
+};
+
+// --- Déroulement -------------------------------------------------------------
+
+/** Le joueur suivant, en sautant les places vides. */
+export const nextPlayer = (state: LudoState): LudoPlayerId =>
+  (((state.current + 1) % state.playerCount) as LudoPlayerId);
+
+/**
+ * Pose les dés d'un tour. Les valeurs viennent de l'appelant : le module ne
+ * tire rien lui-même.
+ */
+export const rollInto = (state: LudoState, dice: readonly number[]): LudoState => {
+  if (state.status.kind !== 'playing') return state;
+  return { ...state, dice: [...dice] };
+};
+
+/** Un lancer, à partir d'une source de hasard fournie. */
+export const rollDice = (random: () => number = Math.random): number[] =>
+  Array.from({ length: DICE_COUNT }, () => 1 + Math.floor(random() * 6));
+
+const withoutOneDie = (dice: readonly number[], die: number): number[] => {
+  const rest = [...dice];
+  const at = rest.indexOf(die);
+  if (at !== -1) rest.splice(at, 1);
+  return rest;
+};
+
+/**
+ * Joue un coup. L'état rendu est neuf ; celui reçu n'est jamais modifié.
+ *
+ * Un coup refusé rend l'état inchangé, ce qui permet à l'appelant de le
+ * détecter par simple identité.
+ */
+export const playLudoMove = (state: LudoState, move: LudoMove): LudoState => {
+  if (state.status.kind !== 'playing') return state;
+
+  const permis = legalLudoMoves(state).some(
+    (m) =>
+      m.pawn === move.pawn &&
+      m.die === move.die &&
+      m.kind === move.kind &&
+      sameSpot(m.to, move.to),
+  );
+  if (!permis) return state;
+
+  const pawns = [...state.pawns];
+  const mover = pawns[move.pawn];
+
+  // La prise d'abord : le pion pris rejoint l'écurie de son ravisseur, et non
+  // la sienne. C'est ce qui fait toute la différence avec le Ludo répandu.
+  if (move.captures !== undefined) {
+    pawns[move.captures] = {
+      ...pawns[move.captures],
+      spot: { zone: 'stable', host: state.current },
+    };
+  }
+
+  pawns[move.pawn] = { ...mover, spot: move.to };
+
+  const dice = withoutOneDie(state.dice, move.die);
+  const gagne = countFinished(pawns, state.current) === PIECES_PER_PLAYER;
+
+  if (gagne) {
+    return {
+      ...state,
+      pawns,
+      dice: [],
+      status: { kind: 'win', winner: state.current },
+    };
+  }
+
+  return { ...state, pawns, dice };
+};
+
+const countFinished = (pawns: readonly Pawn[], player: LudoPlayerId): number =>
+  pawns.filter((p) => p.owner === player && p.spot.zone === 'finished').length;
+
+export const sameSpot = (a: PawnSpot, b: PawnSpot): boolean => {
+  if (a.zone !== b.zone) return false;
+  if (a.zone === 'track' && b.zone === 'track') return a.square === b.square;
+  if (a.zone === 'stable' && b.zone === 'stable') return a.host === b.host;
+  if (a.zone === 'home' && b.zone === 'home') {
+    return a.host === b.host && a.step === b.step;
+  }
+  return true;
+};
+
+/**
+ * Vrai si le tour du joueur doit se poursuivre : il lui reste un dé jouable, ou
+ * un six lui rend la main.
+ */
+export const turnContinues = (state: LudoState): boolean => {
+  if (state.status.kind !== 'playing') return false;
+  return state.dice.length > 0 && legalLudoMoves(state).length > 0;
+};
+
+/**
+ * Vrai si le joueur relance après avoir épuisé ses dés. Un six rend la main —
+ * c'est ce qui récompense la sortie d'écurie — mais pas indéfiniment.
+ */
+export const earnsExtraRoll = (
+  dice: readonly number[],
+  extraRolls: number,
+): boolean => dice.includes(6) && extraRolls < MAX_EXTRA_ROLLS;
+
+/** Passe la main, dés remis à zéro. */
+export const endTurn = (state: LudoState, again: boolean): LudoState => {
+  if (state.status.kind !== 'playing') return state;
+
+  return {
+    ...state,
+    dice: [],
+    current: again ? state.current : nextPlayer(state),
+    extraRolls: again ? state.extraRolls + 1 : 0,
+  };
+};
