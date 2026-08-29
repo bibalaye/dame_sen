@@ -34,17 +34,64 @@
   font-size: 1rem;
 }
 
-.turn {
+/* --- Les camps -------------------------------------------------------------- */
+
+.players {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.players::-webkit-scrollbar {
+  display: none;
+}
+
+.player {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border: 2px solid var(--line);
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 2px solid;
   border-radius: 50px;
   background: var(--surface);
   color: var(--text);
-  font-size: 0.86rem;
+  font-size: 0.72rem;
   font-weight: 800;
+  white-space: nowrap;
+  /* Un camp qui n'a pas la main s'efface : on cherche à qui c'est le tour, pas
+     la liste des présents. */
+  opacity: 0.5;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.playerOn {
+  opacity: 1;
+  transform: scale(1.04);
+  box-shadow: var(--shadow-soft);
+}
+
+.playerName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playerScore {
+  margin-left: auto;
+  color: var(--text-soft);
+  font-size: 0.68rem;
+}
+
+/* Un pion prisonnier se compte : c'est ce qu'il faut deux six pour récupérer. */
+.captives {
+  margin-left: 3px;
+  color: var(--red);
 }
 
 .dot {
@@ -97,6 +144,26 @@
 .center {
   border-radius: 50%;
   background: linear-gradient(140deg, var(--brass), var(--wood-dark));
+}
+
+/* Quand il ne reste qu'à lancer, tout le plateau répond au doigt. */
+.boardWrapper[role='button'] {
+  cursor: pointer;
+}
+
+.boardWrapper[role='button'] .board {
+  animation: attend 2.4s ease-in-out infinite;
+}
+
+@keyframes attend {
+  0%, 100% { box-shadow: var(--shadow-lift); }
+  50% { box-shadow: var(--shadow-lift), 0 0 0 3px color-mix(in srgb, var(--brass) 45%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boardWrapper[role='button'] .board {
+    animation: none;
+  }
 }
 
 /* Une case d'arrivée possible : c'est le seul élément qui bouge à l'écran, et

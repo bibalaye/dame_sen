@@ -7,6 +7,7 @@ import Modal from '../Modal';
 import { play, vibrate } from '@/lib/sound';
 import {
   LUDO_PLAYERS,
+  PIECES_PER_PLAYER,
   createLudoGame,
   earnsExtraRoll,
   endTurn,
@@ -58,6 +59,11 @@ const HUMAN: LudoPlayerId = 0;
 const AI_DELAY = 620;
 /** Le temps de voir les dés avant que la partie ne reprenne. */
 const ROLL_PAUSE = 480;
+/**
+ * Attente avant un coup joué d'office. Assez pour suivre le pion des yeux,
+ * assez court pour ne pas donner l'impression d'attendre.
+ */
+const AUTO_DELAY = 400;
 
 const PAWN_IMAGE: Readonly<Record<LudoPlayerId, string>> = {
   0: '/assets/pieces/pawn-red.png',
@@ -125,6 +131,27 @@ const Ludo: React.FC<LudoProps> = ({
     [moves],
   );
 
+  /**
+   * Le coup à jouer d'office, s'il n'y a rien à décider.
+   *
+   * Deux cas : un seul coup possible, ou un seul pion concerné. Quand un unique
+   * pion est en course, choisir entre ses dés n'est pas une décision — c'est un
+   * clic de plus. On prend alors le meilleur enchaînement, qui sait entrer dans
+   * l'allée quand le compte y tombe juste.
+   *
+   * Dès que deux pions peuvent jouer, la main revient au joueur : là, il y a un
+   * vrai choix.
+   */
+  const coupEvident = useMemo(() => {
+    if (moves.length === 0) return null;
+    if (moves.length === 1) return moves[0];
+
+    const pions = new Set(moves.map((m) => m.pawn));
+    if (pions.size > 1) return null;
+
+    return chooseLudoMove(state, 'hard');
+  }, [moves, state]);
+
   // --- Déroulement ---------------------------------------------------------
 
   /**
@@ -180,6 +207,9 @@ const Ludo: React.FC<LudoProps> = ({
    */
   const tourFini = turnIsOver(state);
 
+  /** Vrai quand le joueur n'a plus qu'à lancer. */
+  const peutLancer = isHuman && !finished && !rolling && state.rolled.length === 0;
+
   useEffect(() => {
     if (finished || rolling || !tourFini) return;
 
@@ -191,6 +221,22 @@ const Ludo: React.FC<LudoProps> = ({
 
     return () => clearTimeout(timer);
   }, [tourFini, state.rolled, state.extraRolls, moves.length, finished, rolling]);
+
+  /**
+   * Le coup sans alternative se joue seul.
+   *
+   * Faire cliquer quelqu'un sur l'unique case où son unique pion peut aller
+   * n'est pas de l'interaction, c'est une formalité. On la lui épargne, sans
+   * jamais lui retirer un choix : dès que deux pions sont jouables, le jeu
+   * attend.
+   */
+  useEffect(() => {
+    if (finished || rolling || tourFini) return;
+    if (!isHuman || !coupEvident) return;
+
+    const timer = setTimeout(() => applyMove(coupEvident), AUTO_DELAY);
+    return () => clearTimeout(timer);
+  }, [coupEvident, isHuman, finished, rolling, tourFini, applyMove]);
 
   /**
    * L'adversaire lance puis joue ; la fin de son tour est réglée par l'effet
@@ -339,19 +385,62 @@ const Ludo: React.FC<LudoProps> = ({
           ✕
         </button>
 
-        <div className={styles.turn}>
-          <span
-            className={styles.dot}
-            style={{ background: LUDO_COLORS[state.current] }}
-            aria-hidden="true"
-          />
-          <span>
-            {isHuman ? 'À vous' : `${LUDO_NAMES[state.current]} joue`}
-          </span>
-        </div>
+        {/* Chaque camp, son avancement, et qui a la main : on voit d'un coup
+            d'œil qui est près de gagner sans compter les pions sur le plateau. */}
+        <ul className={styles.players}>
+          {sieges.map((player) => {
+            const rentres = state.pawns.filter(
+              (p) => p.owner === player && p.spot.zone === 'finished',
+            ).length;
+            const captifs = state.pawns.filter(
+              (p) => p.owner === player && isCaptive(p),
+            ).length;
+
+            return (
+              <li
+                key={player}
+                className={`${styles.player} ${
+                  state.current === player ? styles.playerOn : ''
+                }`}
+                style={{ borderColor: LUDO_COLORS[player] }}
+              >
+                <span
+                  className={styles.dot}
+                  style={{ background: LUDO_COLORS[player] }}
+                  aria-hidden="true"
+                />
+                <span className={styles.playerName}>
+                  {mode === 'solo' && player === HUMAN ? 'Vous' : LUDO_NAMES[player]}
+                </span>
+                <span className={styles.playerScore}>
+                  {rentres}/{PIECES_PER_PLAYER}
+                  {captifs > 0 && (
+                    <span className={styles.captives} title="pions prisonniers">
+                      ⛓{captifs}
+                    </span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       </header>
 
-      <div className={styles.boardWrapper}>
+      {/*
+        Tout le plateau lance les dés quand c'est le moment : viser un bouton de
+        cinquante pixels en bas d'écran à chaque tour est le geste qui fatigue
+        le plus dans ce jeu.
+      */}
+      <div
+        className={styles.boardWrapper}
+        onClick={peutLancer ? roll : undefined}
+        role={peutLancer ? 'button' : undefined}
+        tabIndex={peutLancer ? 0 : undefined}
+        aria-label={peutLancer ? 'Lancer les dés' : undefined}
+        onKeyDown={(event) => {
+          if (peutLancer && (event.key === 'Enter' || event.key === ' ')) roll();
+        }}
+      >
         {/*
           Une fois un pion choisi, on désigne une case : plus aucun pion ne doit
           intercepter le clic, pas même les siens. Sans cela, une case occupée
@@ -474,13 +563,19 @@ const Ludo: React.FC<LudoProps> = ({
 
         {notice && <p className={styles.notice}>{notice}</p>}
 
-        {state.rolled.length > 0 && isHuman && moves.length > 0 && !tourFini && (
-          <p className={styles.hint}>
-            {selected === null
-              ? 'Touchez un pion à déplacer.'
-              : 'Touchez la case d’arrivée.'}
-          </p>
-        )}
+        {peutLancer && <p className={styles.hint}>Touchez le plateau pour lancer.</p>}
+
+        {state.rolled.length > 0 &&
+          isHuman &&
+          moves.length > 0 &&
+          !tourFini &&
+          !coupEvident && (
+            <p className={styles.hint}>
+              {selected === null
+                ? `${playablePawns.size} pions peuvent jouer — touchez le vôtre.`
+                : 'Touchez la case d’arrivée.'}
+            </p>
+          )}
       </footer>
 
       {finished && state.status.kind === 'win' && (
